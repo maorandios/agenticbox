@@ -1,3 +1,20 @@
+# AgenticBox — הנחיות סוכן
+
+## שלב נוכחי
+UI/UX בלבד עם Mock Data ו-State מקומי. אין Backend, Nylas, Supabase, OpenAI או API Routes עסקיים.
+
+## עקרונות
+- ממשק עברית מלא + `dir="rtl"`
+- מונוכרום בלבד; סטטוסים באייקון/טקסט/מסגרת
+- `threadId` ב-URL הוא מקור האמת לשיחה הנבחרת
+- כיווניות תוכן: `dir="auto"`, `unicode-bidi: plaintext`, `<bdi>` ל-metadata
+- Google Sans כ־`--font-ui`; להוסיף קבצים מורשים בלבד תחת `public/fonts`
+
+## Responsive
+- ≥1440: 3 פאנלים מלאים
+- 1280–1439: 3 פאנלים מצומצמים
+- 1024–1279: רשימה + שיחה; Agent כ-Overlay
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

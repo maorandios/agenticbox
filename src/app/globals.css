@@ -1,26 +1,152 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "../styles/fonts.css";
 
 :root {
+  /* Cool modern neutrals — slate/blue-gray, not warm stone */
   --background: #ffffff;
-  --foreground: #171717;
+  --surface: #ffffff;
+  --surface-subtle: #f8f9fa;
+  --surface-hover: #f1f3f5;
+  --surface-selected: #eef1f4;
+  --surface-rail: #f5f6f8;
+  --surface-outgoing: #f4f5f7;
+  --text-primary: #212529;
+  --text-secondary: #6c757d;
+  --text-muted: #9aa0a6;
+  --border: #e5e7eb;
+  --border-strong: #ced4da;
+  --action-primary: #343a40;
+  --action-primary-hover: #212529;
+  --action-on-primary: #ffffff;
+  --focus-ring: #343a40;
+  --shadow-overlay: 0 10px 32px rgba(33, 37, 41, 0.1);
+  --shadow-toast: 0 8px 24px rgba(33, 37, 41, 0.08);
+  --radius-icon: 12px;
+  --radius-avatar: 12px;
+  --radius-avatar-sm: 10px;
+  --radius-card: 16px;
+  --radius-bubble: 16px;
+  --radius-field: 14px;
+  --radius-pill: 9999px;
+  --radius-toast: 14px;
+  --motion-fast: 150ms;
+  --motion-base: 180ms;
+  --motion-drawer: 210ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --rail-width: 80px;
+  --thread-list-width: 330px;
+  --snapshot-width: 414px;
 }
 
 @theme inline {
   --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-surface: var(--surface);
+  --color-surface-subtle: var(--surface-subtle);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-selected: var(--surface-selected);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-action-primary: var(--action-primary);
+  --color-action-primary-hover: var(--action-primary-hover);
+  --color-action-on-primary: var(--action-on-primary);
+  --font-sans: var(--font-ui);
+  --font-mono: var(--font-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  * {
+    border-color: var(--border);
   }
-}
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  html {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100%;
+    overflow: hidden;
+    background: var(--background);
+    color: var(--text-primary);
+    font-family: var(--font-ui);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  button,
+  input,
+  textarea {
+    font: inherit;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  .bidi-content {
+    unicode-bidi: plaintext;
+  }
+
+  .thin-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+
+  .thin-scroll::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .thin-scroll::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: var(--radius-pill);
+  }
+
+  .thin-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .snapshot-scroll {
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+
+  .snapshot-scroll::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .snapshot-scroll::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 9999px;
+  }
+
+  .snapshot-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .snapshot-panel:hover .snapshot-scroll {
+    scrollbar-color: var(--border-strong) transparent;
+  }
+
+  .snapshot-panel:hover .snapshot-scroll::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
