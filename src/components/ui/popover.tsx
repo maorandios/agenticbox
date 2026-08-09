@@ -23,10 +23,11 @@ function PopoverContent({
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
+        dir="rtl"
         align={align}
         sideOffset={sideOffset}
         className={cn(
-          "z-50 w-72 rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-3 shadow-[var(--shadow-overlay)]",
+          "z-50 w-72 rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-3 text-start shadow-[var(--shadow-overlay)]",
           "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
           className,
         )}

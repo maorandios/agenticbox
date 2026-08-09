@@ -29,9 +29,10 @@ function TooltipContent({
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Content
+        dir="rtl"
         sideOffset={sideOffset}
         className={cn(
-          "z-50 max-w-xs rounded-[12px] border border-[var(--border)] bg-[var(--action-primary)] px-3 py-1.5 text-[12px] font-medium text-[var(--action-on-primary)] shadow-[var(--shadow-overlay)]",
+          "z-50 max-w-xs rounded-[12px] border border-[var(--border)] bg-[var(--action-primary)] px-3 py-1.5 text-start text-[12px] font-medium text-[var(--action-on-primary)] shadow-[var(--shadow-overlay)]",
           "animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
           className,
         )}

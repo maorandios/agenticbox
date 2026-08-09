@@ -285,7 +285,7 @@ export function NeedsYouCard({
   });
 
   return (
-    <section className="sticky top-0 z-10 rounded-[16px] border border-[var(--action-primary)] bg-[var(--action-primary)] p-4 text-[var(--action-on-primary)]">
+    <section className="sticky top-0 z-10 rounded-[16px] border-2 border-[#1c2127] bg-[var(--action-primary)] p-4 text-[var(--action-on-primary)] shadow-[0_0_0_1px_rgba(28,33,39,0.35),0_10px_28px_rgba(33,37,41,0.14)]">
       <div className="mb-1 flex items-center gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <ListTodo className="size-3.5 shrink-0 text-white/85" strokeWidth={1.75} />
@@ -338,7 +338,11 @@ export function NeedsYouCard({
         <button
           type="button"
           onClick={() => {
-            dispatch({ type: "SET_COMPOSER_TEXT", text: draftText });
+            dispatch({
+              type: "SET_COMPOSER_FROM_ACTIONS",
+              text: draftText,
+              actionCount: active.length,
+            });
             toast.success("טיוטת תשובה הוכנסה ל־Composer");
           }}
           className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius-pill)] bg-white px-3.5 text-[12px] font-medium text-[var(--action-primary)] transition-colors duration-[140ms] hover:bg-white/90"

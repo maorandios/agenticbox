@@ -21,6 +21,7 @@ const filters: { id: InboxFilter; label: string }[] = [
   { id: "all", label: "הכל" },
   { id: "needs_reply", label: "דורש ממני" },
   { id: "waiting", label: "ממתין" },
+  { id: "starred", label: "מועדפים" },
 ];
 
 function resolveThread(thread: Thread, overrides: Record<string, Partial<Thread>>) {
@@ -38,9 +39,11 @@ function statusLabel(thread: Thread) {
 
 export function ThreadSidebar({ activeThreadId }: { activeThreadId: string | null }) {
   const { state, dispatch } = useWorkspace();
-  const list = getThreadsByInboxFilter(state.selectedQueue).map((t) =>
-    resolveThread(t, state.threadOverrides as Record<string, Partial<Thread>>),
-  );
+  const list = getThreadsByInboxFilter(state.selectedQueue, {
+    starredThreadIds: state.starredThreadIds,
+    archivedThreadIds: state.archivedThreadIds,
+    deletedThreadIds: state.deletedThreadIds,
+  }).map((t) => resolveThread(t, state.threadOverrides as Record<string, Partial<Thread>>));
 
   return (
     <aside className="flex h-full min-h-0 w-full flex-col">
@@ -51,7 +54,11 @@ export function ThreadSidebar({ activeThreadId }: { activeThreadId: string | nul
               תיבת עבודה
             </h1>
             <p className="mt-0.5 text-[13px] text-[var(--text-secondary)]">
-              שיחות שמחכות לטיפול
+              {state.selectedQueue === "archived"
+                ? "שיחות בארכיון"
+                : state.selectedQueue === "starred"
+                  ? "שיחות מסומנות"
+                  : "שיחות שמחכות לטיפול"}
             </p>
           </div>
           <IconButton
@@ -75,7 +82,7 @@ export function ThreadSidebar({ activeThreadId }: { activeThreadId: string | nul
           />
         </label>
 
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           {filters.map((filter) => (
             <MonoPill
               key={filter.id}
@@ -90,13 +97,24 @@ export function ThreadSidebar({ activeThreadId }: { activeThreadId: string | nul
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="inline-flex size-8 items-center justify-center rounded-[var(--radius-icon)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
+                className={cn(
+                  "inline-flex h-8 items-center gap-1 rounded-[999px] px-2.5 text-[12px] font-medium",
+                  state.selectedQueue === "archived"
+                    ? "bg-[var(--surface-selected)] text-[var(--text-primary)]"
+                    : "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]",
+                )}
                 aria-label="עוד פילטרים"
               >
                 <MoreHorizontal className="size-4" strokeWidth={1.75} />
+                ארכיון
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
+              <DropdownMenuItem
+                onClick={() => dispatch({ type: "SET_QUEUE", queue: "archived" })}
+              >
+                ארכיון
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => toast("מסנן הושלם יופיע במסך המשימות")}>
                 הושלם
               </DropdownMenuItem>

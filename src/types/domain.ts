@@ -13,6 +13,7 @@ export type Participant = {
   email: string;
   company?: string;
   initials: string;
+  avatarUrl?: string;
 };
 
 export type Project = {
@@ -38,6 +39,7 @@ export type Message = {
   fromId: string;
   toIds: string[];
   ccIds?: string[];
+  replyToId?: string;
   sentAt: string;
   subject?: string;
   body: string;

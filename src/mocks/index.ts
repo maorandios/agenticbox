@@ -120,11 +120,33 @@ export function searchMock(query: string) {
   );
 }
 
-export function getThreadsByInboxFilter(filter: "all" | "needs_reply" | "waiting") {
-  const list =
-    filter === "all"
-      ? threads.filter((t) => t.status !== "done")
-      : threads.filter((t) => threadMatchesQueue(t, filter));
+export function getThreadsByInboxFilter(
+  filter: "all" | "needs_reply" | "waiting" | "starred" | "archived",
+  options?: {
+    starredThreadIds?: string[];
+    archivedThreadIds?: string[];
+    deletedThreadIds?: string[];
+  },
+) {
+  const starred = new Set(options?.starredThreadIds ?? []);
+  const archived = new Set(options?.archivedThreadIds ?? []);
+  const deleted = new Set(options?.deletedThreadIds ?? []);
+
+  let list = threads.filter((t) => !deleted.has(t.id));
+
+  if (filter === "archived") {
+    list = list.filter((t) => archived.has(t.id));
+  } else if (filter === "starred") {
+    list = list.filter((t) => starred.has(t.id));
+  } else {
+    list = list.filter((t) => !archived.has(t.id));
+    if (filter === "all") {
+      list = list.filter((t) => t.status !== "done");
+    } else {
+      list = list.filter((t) => threadMatchesQueue(t, filter));
+    }
+  }
+
   return list.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 

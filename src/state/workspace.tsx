@@ -5,7 +5,7 @@ import type { MailboxStatus, QueueId, SearchMode, Task } from "@/types/domain";
 
 export type ComposerMode = "reply" | "replyAll" | "forward";
 
-export type InboxFilter = "all" | "needs_reply" | "waiting";
+export type InboxFilter = "all" | "needs_reply" | "waiting" | "starred" | "archived";
 
 export type PrimaryActionStatus =
   | "active"
@@ -34,6 +34,10 @@ export type WorkspaceState = {
       projectId: string;
     }>
   >;
+  starredThreadIds: string[];
+  archivedThreadIds: string[];
+  mutedThreadIds: string[];
+  deletedThreadIds: string[];
   completedTaskIds: string[];
   dismissedInsightIds: string[];
   approvedInsightIds: string[];
@@ -44,6 +48,8 @@ export type WorkspaceState = {
     mode: ComposerMode;
     text: string;
     draftSavedAt?: string;
+    /** When set, composer was opened from NeedsYou actions */
+    draftActionCount?: number | null;
   };
   improvePreview: string | null;
   commandMenuOpen: boolean;
@@ -69,6 +75,7 @@ export type WorkspaceAction =
   | { type: "APPROVE_INSIGHT"; insightId: string }
   | { type: "SET_COMPOSER_MODE"; mode: ComposerMode }
   | { type: "SET_COMPOSER_TEXT"; text: string }
+  | { type: "SET_COMPOSER_FROM_ACTIONS"; text: string; actionCount: number }
   | { type: "SAVE_DRAFT" }
   | { type: "SET_IMPROVE_PREVIEW"; text: string | null }
   | { type: "SET_COMMAND_MENU"; open: boolean }
@@ -78,6 +85,14 @@ export type WorkspaceAction =
   | { type: "ASSIGN_THREAD_PROJECT"; threadId: string; projectId: string }
   | { type: "SET_MAILBOX_STATUS"; status: MailboxStatus }
   | { type: "HIGHLIGHT_MESSAGE"; messageId: string | null }
+  | { type: "TOGGLE_STAR_THREAD"; threadId: string }
+  | { type: "ARCHIVE_THREAD"; threadId: string }
+  | { type: "UNARCHIVE_THREAD"; threadId: string }
+  | { type: "TOGGLE_MUTE_THREAD"; threadId: string }
+  | { type: "DELETE_THREAD"; threadId: string }
+  | { type: "RESTORE_DELETED_THREAD"; threadId: string }
+  | { type: "MARK_THREAD_UNREAD"; threadId: string }
+  | { type: "SET_THREAD_STATUS"; threadId: string; status: QueueId }
   | {
       type: "ADD_TASK_FROM_ACTION";
       task: Task;
@@ -107,6 +122,10 @@ export const initialWorkspaceState: WorkspaceState = {
     agentOpen: false,
   },
   threadOverrides: {},
+  starredThreadIds: [],
+  archivedThreadIds: [],
+  mutedThreadIds: [],
+  deletedThreadIds: [],
   completedTaskIds: [],
   dismissedInsightIds: [],
   approvedInsightIds: [],
@@ -115,6 +134,7 @@ export const initialWorkspaceState: WorkspaceState = {
   composer: {
     mode: "reply",
     text: "",
+    draftActionCount: null,
   },
   improvePreview: null,
   commandMenuOpen: false,
@@ -205,7 +225,24 @@ export function workspaceReducer(
     case "SET_COMPOSER_MODE":
       return { ...state, composer: { ...state.composer, mode: action.mode } };
     case "SET_COMPOSER_TEXT":
-      return { ...state, composer: { ...state.composer, text: action.text } };
+      return {
+        ...state,
+        composer: {
+          ...state.composer,
+          text: action.text,
+          draftActionCount: null,
+        },
+      };
+    case "SET_COMPOSER_FROM_ACTIONS":
+      return {
+        ...state,
+        composer: {
+          ...state.composer,
+          text: action.text,
+          draftActionCount: action.actionCount,
+          mode: "replyAll",
+        },
+      };
     case "SAVE_DRAFT":
       return {
         ...state,
@@ -246,6 +283,68 @@ export function workspaceReducer(
       return { ...state, mailboxStatus: action.status };
     case "HIGHLIGHT_MESSAGE":
       return { ...state, highlightedMessageId: action.messageId };
+    case "TOGGLE_STAR_THREAD": {
+      const starred = state.starredThreadIds.includes(action.threadId);
+      return {
+        ...state,
+        starredThreadIds: starred
+          ? state.starredThreadIds.filter((id) => id !== action.threadId)
+          : [...state.starredThreadIds, action.threadId],
+      };
+    }
+    case "ARCHIVE_THREAD":
+      if (state.archivedThreadIds.includes(action.threadId)) return state;
+      return {
+        ...state,
+        archivedThreadIds: [...state.archivedThreadIds, action.threadId],
+      };
+    case "UNARCHIVE_THREAD":
+      return {
+        ...state,
+        archivedThreadIds: state.archivedThreadIds.filter((id) => id !== action.threadId),
+      };
+    case "TOGGLE_MUTE_THREAD": {
+      const muted = state.mutedThreadIds.includes(action.threadId);
+      return {
+        ...state,
+        mutedThreadIds: muted
+          ? state.mutedThreadIds.filter((id) => id !== action.threadId)
+          : [...state.mutedThreadIds, action.threadId],
+      };
+    }
+    case "DELETE_THREAD":
+      if (state.deletedThreadIds.includes(action.threadId)) return state;
+      return {
+        ...state,
+        deletedThreadIds: [...state.deletedThreadIds, action.threadId],
+      };
+    case "RESTORE_DELETED_THREAD":
+      return {
+        ...state,
+        deletedThreadIds: state.deletedThreadIds.filter((id) => id !== action.threadId),
+      };
+    case "MARK_THREAD_UNREAD":
+      return {
+        ...state,
+        threadOverrides: {
+          ...state.threadOverrides,
+          [action.threadId]: {
+            ...state.threadOverrides[action.threadId],
+            unread: true,
+          },
+        },
+      };
+    case "SET_THREAD_STATUS":
+      return {
+        ...state,
+        threadOverrides: {
+          ...state.threadOverrides,
+          [action.threadId]: {
+            ...state.threadOverrides[action.threadId],
+            status: action.status,
+          },
+        },
+      };
     case "ADD_TASK_FROM_ACTION": {
       if (state.userTasks.some((t) => t.id === action.task.id)) {
         return patchPrimaryAction(state, action.actionId, {
