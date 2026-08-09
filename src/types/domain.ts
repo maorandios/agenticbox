@@ -31,7 +31,63 @@ export type Attachment = {
   mimeType: string;
   sizeLabel: string;
   messageId: string;
+  /** When true, file is an inline body image — not shown in attachment rows */
+  inlineInBody?: boolean;
+  src?: string;
+  alt?: string;
 };
+
+export type MessageParagraphBlock = {
+  type: "paragraph";
+  id: string;
+  text: string;
+};
+
+export type MessageListBlock = {
+  type: "list";
+  id: string;
+  ordered?: boolean;
+  items: string[];
+};
+
+export type MessageQuotedTextBlock = {
+  type: "quoted-text";
+  id: string;
+  text: string;
+};
+
+export type MessageInlineImageBlock = {
+  type: "inline-image";
+  id: string;
+  fileName: string;
+  src: string;
+  alt?: string;
+  sizeLabel?: string;
+  mimeType?: string;
+  /** Mock: external image blocked until user reveals */
+  privacyBlocked?: boolean;
+  /** Mock: force load failure until retry clears it */
+  forceError?: boolean;
+  /** Excluded from render (tracking / spacer / signature logo) */
+  isTrackingPixel?: boolean;
+  isSpacer?: boolean;
+  isSignatureLogo?: boolean;
+  width?: number;
+  height?: number;
+};
+
+export type MessageAttachmentBlock = {
+  type: "attachment";
+  id: string;
+  attachmentId: string;
+};
+
+export type MessageContentBlock =
+  | MessageParagraphBlock
+  | MessageListBlock
+  | MessageQuotedTextBlock
+  | MessageInlineImageBlock
+  | MessageAttachmentBlock;
 
 export type Message = {
   id: string;
@@ -43,6 +99,8 @@ export type Message = {
   sentAt: string;
   subject?: string;
   body: string;
+  /** Structured body blocks; when present, rendered instead of plain `body` */
+  content?: MessageContentBlock[];
   isOutbound: boolean;
   quotedText?: string;
   signature?: string;

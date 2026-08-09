@@ -4,18 +4,19 @@ import * as React from "react";
 import {
   Bold,
   ChevronDown,
+  ChevronUp,
   Clock3,
   Copy,
   Download,
   Eye,
-  FileText,
-  ListPlus,
-  MoreHorizontal,
+  FileImage,
+  Forward,
   Paperclip,
   Reply,
   ReplyAll,
   Send,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/cn";
@@ -23,12 +24,13 @@ import { formatMessageDateTime, formatThreadTime } from "@/lib/format";
 import { getDisplayInitials } from "@/lib/initials";
 import {
   CURRENT_USER_ID,
-  getAttachmentsForMessage,
+  getBubbleAttachments,
   getMessagesForThread,
   getParticipant,
   getThread,
   getThreadSnapshot,
 } from "@/mocks";
+import { MessageBody } from "@/components/conversation/MessageBody";
 import { ThreadHeader } from "@/components/conversation/ThreadHeader";
 import { IconButton } from "@/components/shared/IconButton";
 import {
@@ -55,13 +57,15 @@ async function copyText(value: string, success: string) {
   }
 }
 
-function PersonAvatar({
-  person,
-  dark = false,
-}: {
-  person?: Participant | null;
-  dark?: boolean;
-}) {
+function attachmentTypeLabel(file: Attachment): string {
+  const ext = file.fileName.split(".").pop();
+  if (ext && ext !== file.fileName) return ext.toUpperCase();
+  if (file.mimeType.startsWith("image/")) return "IMG";
+  if (file.mimeType === "application/pdf") return "PDF";
+  return "FILE";
+}
+
+function PersonAvatar({ person }: { person?: Participant | null }) {
   const initials = person
     ? getDisplayInitials(person.name) || person.initials
     : "?";
@@ -72,20 +76,13 @@ function PersonAvatar({
       <img
         src={person.avatarUrl}
         alt={person.name}
-        className="size-9 shrink-0 rounded-full object-cover"
+        className="size-9 shrink-0 self-start rounded-full object-cover ring-1 ring-[var(--border)]"
       />
     );
   }
 
   return (
-    <div
-      className={cn(
-        "flex size-9 shrink-0 items-center justify-center rounded-full text-[12px] font-semibold",
-        dark
-          ? "bg-white/12 text-white"
-          : "bg-[#ECECE8] text-[#363633] ring-1 ring-[#E7E7E1]",
-      )}
-    >
+    <div className="flex size-9 shrink-0 self-start items-center justify-center rounded-full bg-[#ECECE8] text-[12px] font-semibold text-[#363633] ring-1 ring-[#E7E7E1]">
       {initials}
     </div>
   );
@@ -100,26 +97,26 @@ function QuotedBlock({
 }) {
   const [open, setOpen] = React.useState(false);
   return (
-    <div className="mt-3">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={cn(
-          "inline-flex items-center gap-1 text-[12px] transition-colors duration-[130ms]",
-          dark
-            ? "text-white/65 hover:text-white"
-            : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]",
-        )}
-      >
-        <ChevronDown
+    <div className="mt-3" dir="rtl">
+      <div className="flex justify-start">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
           className={cn(
-            "size-3.5 transition-transform duration-[180ms] ease-out",
-            open && "rotate-180",
+            "inline-flex items-center gap-1 text-[12px] transition-colors duration-[130ms]",
+            dark
+              ? "text-white/65 hover:text-white"
+              : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]",
           )}
-          strokeWidth={1.75}
-        />
-        {open ? "הסתר טקסט מצוטט" : "הצג טקסט מצוטט"}
-      </button>
+        >
+          {open ? (
+            <ChevronUp className="size-[14px]" strokeWidth={1.75} />
+          ) : (
+            <ChevronDown className="size-[14px]" strokeWidth={1.75} />
+          )}
+          {open ? "הסתר טקסט מצוטט" : "הצג טקסט מצוטט"}
+        </button>
+      </div>
       <div
         className={cn(
           "grid transition-[grid-template-rows] duration-[180ms] ease-out",
@@ -129,14 +126,14 @@ function QuotedBlock({
         <div className="min-h-0 overflow-hidden">
           <div
             className={cn(
-              "mt-2 border-r-2 pr-3 text-[13px] leading-6",
+              "mt-2 border-r-2 pr-3 text-start text-[13px] leading-6 whitespace-pre-wrap",
               dark
                 ? "border-white/25 text-white/65"
                 : "border-[#E7E7E1] text-[var(--text-secondary)]",
             )}
-            dir="auto"
+            dir="rtl"
           >
-            <span className="bidi-content whitespace-pre-wrap">{text}</span>
+            {text}
           </div>
         </div>
       </div>
@@ -151,43 +148,70 @@ function AttachmentRow({
   file: Attachment;
   dark: boolean;
 }) {
-  const canPreview =
-    file.mimeType.startsWith("image/") || file.mimeType === "application/pdf";
+  const typeLabel = attachmentTypeLabel(file);
+  const openPreview = () => toast("תצוגה מקדימה מדומה");
+  const metaClass = dark ? "text-white/65" : "text-[var(--text-muted)]";
 
   return (
     <div
       className={cn(
-        "flex items-center gap-2 rounded-[10px] px-2.5 py-2",
+        "flex min-h-[48px] items-center gap-2 rounded-[12px] px-3 py-2.5",
         dark ? "bg-white/8" : "bg-[#ECECE8]",
       )}
+      dir="rtl"
     >
-      <FileText
-        className={cn("size-4 shrink-0", dark ? "text-white/80" : "text-[#363633]")}
-        strokeWidth={1.75}
-      />
-      <div className="min-w-0 flex-1">
-        <div
+      <button
+        type="button"
+        onClick={openPreview}
+        className="flex min-w-0 flex-1 items-center gap-2 text-start"
+      >
+        <FileImage
           className={cn(
-            "truncate text-[12.5px] font-medium",
-            dark ? "text-white" : "text-[#363633]",
+            "size-4 shrink-0",
+            dark ? "text-white/80" : "text-[#363633]",
           )}
-        >
-          <bdi>{file.fileName}</bdi>
-        </div>
-        <div className={cn("text-[11px]", dark ? "text-white/65" : "text-[var(--text-muted)]")}>
-          {file.sizeLabel}
-        </div>
-      </div>
-      {canPreview ? (
+          strokeWidth={1.75}
+        />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              className={cn(
+                "min-w-0 truncate text-[12px] font-semibold",
+                dark ? "text-white" : "text-[#363633]",
+              )}
+            >
+              <bdi>{file.fileName}</bdi>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>
+            <bdi>{file.fileName}</bdi>
+          </TooltipContent>
+        </Tooltip>
+        <span className={cn("shrink-0 text-[12px]", metaClass)} aria-hidden>
+          ·
+        </span>
+        <bdi className={cn("shrink-0 text-[12px]", metaClass)}>{file.sizeLabel}</bdi>
+        <span className={cn("shrink-0 text-[12px]", metaClass)} aria-hidden>
+          ·
+        </span>
+        <bdi className={cn("shrink-0 text-[12px]", metaClass)}>{typeLabel}</bdi>
+      </button>
+
+      <div className="flex shrink-0 items-center gap-0.5">
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               type="button"
               aria-label="תצוגה מקדימה"
-              onClick={() => toast("תצוגה מקדימה מדומה")}
+              onClick={(e) => {
+                e.stopPropagation();
+                openPreview();
+              }}
               className={cn(
                 "inline-flex size-7 items-center justify-center rounded-[8px]",
-                dark ? "text-white/75 hover:bg-white/10" : "text-[var(--text-secondary)] hover:bg-black/5",
+                dark
+                  ? "text-white/75 hover:bg-white/10"
+                  : "text-[var(--text-secondary)] hover:bg-black/5",
               )}
             >
               <Eye className="size-3.5" strokeWidth={1.75} />
@@ -195,23 +219,107 @@ function AttachmentRow({
           </TooltipTrigger>
           <TooltipContent>תצוגה מקדימה</TooltipContent>
         </Tooltip>
-      ) : null}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            aria-label="הורדה"
-            onClick={() => toast(`הורדה מדומה — ${file.fileName}`)}
-            className={cn(
-              "inline-flex size-7 items-center justify-center rounded-[8px]",
-              dark ? "text-white/75 hover:bg-white/10" : "text-[var(--text-secondary)] hover:bg-black/5",
-            )}
-          >
-            <Download className="size-3.5" strokeWidth={1.75} />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>הורדה</TooltipContent>
-      </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label="הורדה"
+              onClick={(e) => {
+                e.stopPropagation();
+                toast(`הורדה מדומה — ${file.fileName}`);
+              }}
+              className={cn(
+                "inline-flex size-7 items-center justify-center rounded-[8px]",
+                dark
+                  ? "text-white/75 hover:bg-white/10"
+                  : "text-[var(--text-secondary)] hover:bg-black/5",
+              )}
+            >
+              <Download className="size-3.5" strokeWidth={1.75} />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>הורדה</TooltipContent>
+        </Tooltip>
+      </div>
+    </div>
+  );
+}
+
+function MessageToolbar({ message }: { message: Message }) {
+  const { dispatch } = useWorkspace();
+
+  const actions = [
+    {
+      label: "השב",
+      icon: Reply,
+      onClick: () => {
+        dispatch({ type: "SET_COMPOSER_MODE", mode: "reply" });
+        toast("מצב השב");
+      },
+    },
+    {
+      label: "השב לכולם",
+      icon: ReplyAll,
+      onClick: () => {
+        dispatch({ type: "SET_COMPOSER_MODE", mode: "replyAll" });
+        toast("מצב השב לכולם");
+      },
+    },
+    {
+      label: "העבר",
+      icon: Forward,
+      onClick: () => {
+        dispatch({ type: "SET_COMPOSER_MODE", mode: "forward" });
+        toast("מצב העבר");
+      },
+    },
+    {
+      label: "העתק תוכן",
+      icon: Copy,
+      onClick: () => copyText(message.body, "תוכן ההודעה הועתק"),
+    },
+    {
+      label: "העבר הודעה לאשפה",
+      icon: Trash2,
+      destructive: true as const,
+      onClick: () => {
+        dispatch({ type: "DELETE_MESSAGE", messageId: message.id });
+        toast("ההודעה הועברה לאשפה", {
+          action: {
+            label: "ביטול",
+            onClick: () =>
+              dispatch({
+                type: "RESTORE_DELETED_MESSAGE",
+                messageId: message.id,
+              }),
+          },
+        });
+      },
+    },
+  ];
+
+  return (
+    <div className="mt-[5px] flex justify-end gap-0.5" dir="rtl">
+      {actions.map((item) => (
+        <Tooltip key={item.label}>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label={item.label}
+              onClick={item.onClick}
+              className={cn(
+                "inline-flex size-7 items-center justify-center rounded-[8px] text-[var(--text-secondary)] opacity-80 transition-all duration-[120ms] ease-out hover:bg-[#F2F2EE] hover:opacity-100",
+                item.destructive
+                  ? "hover:text-red-600"
+                  : "hover:text-[var(--text-primary)]",
+              )}
+            >
+              <item.icon className="size-4" strokeWidth={1.75} />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>{item.label}</TooltipContent>
+        </Tooltip>
+      ))}
     </div>
   );
 }
@@ -232,7 +340,8 @@ function MessageBubble({
     .map((id) => getParticipant(id))
     .filter((p): p is Participant => Boolean(p));
   const replyTo = message.replyToId ? getParticipant(message.replyToId) : null;
-  const attachments = getAttachmentsForMessage(message.id);
+  const attachments = getBubbleAttachments(message);
+  const hasContentAttachments = message.content?.some((b) => b.type === "attachment");
   const mine = message.isOutbound;
   const dark = !mine;
   const fullDate = formatMessageDateTime(message.sentAt);
@@ -245,255 +354,156 @@ function MessageBubble({
     >
       <div
         className={cn(
-          "group relative flex max-w-[min(70%,660px)] gap-2.5",
+          "flex max-w-[min(70%,660px)] gap-[10px]",
           mine ? "flex-row-reverse" : "flex-row",
         )}
       >
-        <PersonAvatar person={sender} dark={dark} />
+        <PersonAvatar person={sender} />
 
-        <div
-          className={cn(
-            "relative w-fit max-w-full rounded-[16px] px-[18px] py-4 transition-[box-shadow] duration-[140ms]",
-            mine
-              ? "border border-[#E7E7E1] bg-[#F6F6F3] text-[#363633]"
-              : "bg-[#3F4548] text-[#FCFCF8]",
-            highlighted && "ring-2 ring-[#A8A8A1] ring-offset-2",
-          )}
-        >
-          {/* Hover toolbar — outer top corner */}
+        <div className="min-w-0">
           <div
             className={cn(
-              "pointer-events-none absolute -top-3 z-10 flex items-center gap-0.5 rounded-[10px] border border-[#E7E7E1] bg-white p-0.5 opacity-0 shadow-[0_4px_14px_rgba(33,37,41,0.08)] transition-opacity duration-[130ms]",
-              "group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100",
-              mine ? "end-0" : "start-0",
+              "relative w-fit max-w-full rounded-[16px] px-[18px] py-4 transition-[box-shadow] duration-[140ms]",
+              mine
+                ? "border border-[#E7E7E1] bg-[#F6F6F3] text-[#363633]"
+                : "bg-[#3F4548] text-[#FCFCF8]",
+              highlighted && "ring-2 ring-[#A8A8A1] ring-offset-2",
             )}
-            dir="rtl"
           >
-            {(
-              [
-                {
-                  label: "השב",
-                  icon: Reply,
-                  onClick: () => toast("מצב השב (מדומה)"),
-                },
-                {
-                  label: "השב לכולם",
-                  icon: ReplyAll,
-                  onClick: () => toast("מצב השב לכולם (מדומה)"),
-                },
-                {
-                  label: "הוסף למשימות",
-                  icon: ListPlus,
-                  onClick: () => toast.success("נוסף למשימות (מדומה)"),
-                },
-                {
-                  label: "העתק",
-                  icon: Copy,
-                  onClick: () => copyText(message.body, "תוכן ההודעה הועתק"),
-                },
-              ] as const
-            ).map((item) => (
-              <Tooltip key={item.label}>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label={item.label}
-                    onClick={item.onClick}
-                    className="inline-flex size-7 items-center justify-center rounded-[8px] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
-                  >
-                    <item.icon className="size-4" strokeWidth={1.75} />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>{item.label}</TooltipContent>
-              </Tooltip>
-            ))}
-
-            <DropdownMenu>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      aria-label="פעולות AI"
-                      className="inline-flex size-7 items-center justify-center rounded-[8px] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
-                    >
-                      <Sparkles className="size-4" strokeWidth={1.75} />
-                    </button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent>פעולות AI</TooltipContent>
-              </Tooltip>
-              <DropdownMenuContent align="start" className="min-w-[180px]">
-                <DropdownMenuItem onSelect={() => toast("נסח תשובה (מדומה)")}>
-                  נסח תשובה
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => toast("סכם הודעה (מדומה)")}>
-                  סכם הודעה
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => toast("חלץ פעולה (מדומה)")}>
-                  חלץ פעולה
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => toast("הסבר בהקשר השרשור (מדומה)")}>
-                  הסבר בהקשר השרשור
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <DropdownMenu>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      aria-label="עוד"
-                      className="inline-flex size-7 items-center justify-center rounded-[8px] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
-                    >
-                      <MoreHorizontal className="size-4" strokeWidth={1.75} />
-                    </button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent>עוד</TooltipContent>
-              </Tooltip>
-              <DropdownMenuContent align="start">
-                <DropdownMenuItem onSelect={() => toast("העבר (מדומה)")}>העבר</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => toast("מחק (מדומה)")}>מחק</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-
-          <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1" dir="rtl">
-            <span
-              className={cn(
-                "text-[13.5px] font-semibold",
-                dark ? "text-[#FCFCF8]" : "text-[#363633]",
-              )}
-            >
-              <bdi>{sender?.name ?? "לא ידוע"}</bdi>
-            </span>
-            {sender?.email ? (
+            <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1" dir="rtl">
               <span
                 className={cn(
-                  "group/mail inline-flex items-center gap-1 text-[11.5px]",
-                  dark ? "text-white/65" : "text-[var(--text-muted)]",
+                  "text-[13.5px] font-semibold",
+                  dark ? "text-[#FCFCF8]" : "text-[#363633]",
                 )}
-                dir="ltr"
               >
-                <bdi>{sender.email}</bdi>
-                <button
-                  type="button"
-                  aria-label="העתק כתובת מייל"
-                  onClick={() => copyText(sender.email, "כתובת המייל הועתקה")}
-                  className={cn(
-                    "inline-flex size-5 items-center justify-center rounded-[4px] opacity-70 transition-opacity hover:opacity-100",
-                    dark ? "hover:bg-white/10" : "hover:bg-black/5",
-                  )}
-                >
-                  <Copy className="size-3" strokeWidth={1.75} />
-                </button>
+                <bdi>{sender?.name ?? "לא ידוע"}</bdi>
               </span>
-            ) : null}
-            <Tooltip>
-              <TooltipTrigger asChild>
+              {sender?.email ? (
                 <span
                   className={cn(
-                    "inline-flex items-center gap-1 text-[11.5px]",
+                    "group/mail inline-flex items-center gap-1 text-[11.5px]",
                     dark ? "text-white/65" : "text-[var(--text-muted)]",
                   )}
+                  dir="ltr"
                 >
-                  <Clock3 className="size-3" strokeWidth={1.75} />
-                  <time dateTime={message.sentAt}>{fullDate}</time>
+                  <bdi>{sender.email}</bdi>
+                  <button
+                    type="button"
+                    aria-label="העתק כתובת מייל"
+                    onClick={() => copyText(sender.email, "כתובת המייל הועתקה")}
+                    className={cn(
+                      "inline-flex size-5 items-center justify-center rounded-[4px] opacity-70 transition-opacity hover:opacity-100",
+                      dark ? "hover:bg-white/10" : "hover:bg-black/5",
+                    )}
+                  >
+                    <Copy className="size-3" strokeWidth={1.75} />
+                  </button>
                 </span>
-              </TooltipTrigger>
-              <TooltipContent>{formatThreadTime(message.sentAt)}</TooltipContent>
-            </Tooltip>
-            <button
-              type="button"
-              aria-expanded={detailsOpen}
-              onClick={() => setDetailsOpen((v) => !v)}
-              className={cn(
-                "inline-flex size-5 items-center justify-center rounded-[4px]",
-                dark
-                  ? "text-white/65 hover:bg-white/10 hover:text-white"
-                  : "text-[var(--text-muted)] hover:bg-black/5 hover:text-[var(--text-secondary)]",
-              )}
-              aria-label="פרטי הודעה"
-            >
-              <ChevronDown
+              ) : null}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1 text-[11.5px]",
+                      dark ? "text-white/65" : "text-[var(--text-muted)]",
+                    )}
+                  >
+                    <Clock3 className="size-3" strokeWidth={1.75} />
+                    <time dateTime={message.sentAt}>{fullDate}</time>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>{formatThreadTime(message.sentAt)}</TooltipContent>
+              </Tooltip>
+              <button
+                type="button"
+                aria-expanded={detailsOpen}
+                onClick={() => setDetailsOpen((v) => !v)}
                 className={cn(
-                  "size-3.5 transition-transform duration-[180ms] ease-out",
-                  detailsOpen && "rotate-180",
+                  "inline-flex size-5 items-center justify-center rounded-[4px]",
+                  dark
+                    ? "text-white/65 hover:bg-white/10 hover:text-white"
+                    : "text-[var(--text-muted)] hover:bg-black/5 hover:text-[var(--text-secondary)]",
                 )}
-                strokeWidth={1.75}
-              />
-            </button>
-          </div>
-
-          <div
-            className={cn(
-              "grid transition-[grid-template-rows] duration-[180ms] ease-out",
-              detailsOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-            )}
-          >
-            <div className="min-h-0 overflow-hidden">
-              <div
-                className={cn(
-                  "mb-3 space-y-1 rounded-[10px] px-2.5 py-2 text-[12px]",
-                  dark ? "bg-white/8 text-white/65" : "bg-[#ECECE8] text-[var(--text-secondary)]",
-                )}
-                dir="rtl"
+                aria-label="פרטי הודעה"
               >
-                <div>
-                  <span className="font-medium">מאת: </span>
-                  <bdi>{sender?.name}</bdi>{" "}
-                  <span dir="ltr">&lt;{sender?.email}&gt;</span>
-                </div>
-                <div>
-                  <span className="font-medium">אל: </span>
-                  {toPeople.map((p) => p.name).join(" · ") || "—"}
-                </div>
-                {ccPeople.length > 0 ? (
+                <ChevronDown
+                  className={cn(
+                    "size-3.5 transition-transform duration-[180ms] ease-out",
+                    detailsOpen && "rotate-180",
+                  )}
+                  strokeWidth={1.75}
+                />
+              </button>
+            </div>
+
+            <div
+              className={cn(
+                "grid transition-[grid-template-rows] duration-[180ms] ease-out",
+                detailsOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+              )}
+            >
+              <div className="min-h-0 overflow-hidden">
+                <div
+                  className={cn(
+                    "mb-3 space-y-1 rounded-[10px] px-2.5 py-2 text-[12px]",
+                    dark
+                      ? "bg-white/8 text-white/65"
+                      : "bg-[#ECECE8] text-[var(--text-secondary)]",
+                  )}
+                  dir="rtl"
+                >
                   <div>
-                    <span className="font-medium">עותק: </span>
-                    {ccPeople.map((p) => p.name).join(" · ")}
+                    <span className="font-medium">מאת: </span>
+                    <bdi>{sender?.name}</bdi>{" "}
+                    <span dir="ltr">&lt;{sender?.email}&gt;</span>
                   </div>
-                ) : null}
-                {replyTo ? (
                   <div>
-                    <span className="font-medium">Reply-To: </span>
-                    <bdi>{replyTo.name}</bdi>{" "}
-                    <span dir="ltr">&lt;{replyTo.email}&gt;</span>
+                    <span className="font-medium">אל: </span>
+                    {toPeople.map((p) => p.name).join(" · ") || "—"}
                   </div>
-                ) : null}
-                <div>
-                  <span className="font-medium">תאריך: </span>
-                  {fullDate}
+                  {ccPeople.length > 0 ? (
+                    <div>
+                      <span className="font-medium">עותק: </span>
+                      {ccPeople.map((p) => p.name).join(" · ")}
+                    </div>
+                  ) : null}
+                  {replyTo ? (
+                    <div>
+                      <span className="font-medium">Reply-To: </span>
+                      <bdi>{replyTo.name}</bdi>{" "}
+                      <span dir="ltr">&lt;{replyTo.email}&gt;</span>
+                    </div>
+                  ) : null}
+                  <div>
+                    <span className="font-medium">תאריך: </span>
+                    {fullDate}
+                  </div>
                 </div>
               </div>
             </div>
+
+            <MessageBody
+              message={message}
+              dark={dark}
+              renderQuoted={({ text, dark: isDark }) => (
+                <QuotedBlock text={text} dark={isDark} />
+              )}
+              renderAttachment={({ file, dark: isDark }) => (
+                <AttachmentRow file={file} dark={isDark} />
+              )}
+            />
+
+            {!hasContentAttachments && attachments.length > 0 ? (
+              <div className="mt-3 space-y-1.5">
+                {attachments.map((file) => (
+                  <AttachmentRow key={file.id} file={file} dark={dark} />
+                ))}
+              </div>
+            ) : null}
           </div>
 
-          <div
-            className={cn(
-              "whitespace-pre-wrap text-[15px] leading-[1.7]",
-              dark && "[&_a]:text-white [&_a]:underline-offset-2 hover:[&_a]:underline",
-            )}
-            dir="auto"
-          >
-            <span className="bidi-content">{message.body}</span>
-          </div>
-
-          {message.signature ? (
-            <QuotedBlock text={message.signature} dark={dark} />
-          ) : null}
-          {message.quotedText ? <QuotedBlock text={message.quotedText} dark={dark} /> : null}
-
-          {attachments.length > 0 ? (
-            <div className="mt-3 space-y-1.5">
-              {attachments.map((file) => (
-                <AttachmentRow key={file.id} file={file} dark={dark} />
-              ))}
-            </div>
-          ) : null}
+          <MessageToolbar message={message} />
         </div>
       </div>
     </article>
@@ -534,7 +544,9 @@ function AutoGrowTextarea({
 export function ConversationPanel({ threadId }: { threadId: string }) {
   const thread = getThread(threadId);
   const { state, dispatch } = useWorkspace();
-  const messages = getMessagesForThread(threadId);
+  const messages = getMessagesForThread(threadId).filter(
+    (message) => !state.deletedMessageIds.includes(message.id),
+  );
   const snapshot = getThreadSnapshot(threadId);
 
   React.useEffect(() => {

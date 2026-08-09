@@ -38,6 +38,11 @@ export type WorkspaceState = {
   archivedThreadIds: string[];
   mutedThreadIds: string[];
   deletedThreadIds: string[];
+  deletedMessageIds: string[];
+  /** Inline image ids the user chose to reveal (privacy) */
+  revealedExternalImageIds: string[];
+  /** Sender ids permanently allowed to show external images */
+  alwaysShowImagesFromSenderIds: string[];
   completedTaskIds: string[];
   dismissedInsightIds: string[];
   approvedInsightIds: string[];
@@ -91,6 +96,10 @@ export type WorkspaceAction =
   | { type: "TOGGLE_MUTE_THREAD"; threadId: string }
   | { type: "DELETE_THREAD"; threadId: string }
   | { type: "RESTORE_DELETED_THREAD"; threadId: string }
+  | { type: "DELETE_MESSAGE"; messageId: string }
+  | { type: "RESTORE_DELETED_MESSAGE"; messageId: string }
+  | { type: "REVEAL_EXTERNAL_IMAGE"; imageId: string }
+  | { type: "ALWAYS_SHOW_IMAGES_FROM_SENDER"; senderId: string }
   | { type: "MARK_THREAD_UNREAD"; threadId: string }
   | { type: "SET_THREAD_STATUS"; threadId: string; status: QueueId }
   | {
@@ -126,6 +135,9 @@ export const initialWorkspaceState: WorkspaceState = {
   archivedThreadIds: [],
   mutedThreadIds: [],
   deletedThreadIds: [],
+  deletedMessageIds: [],
+  revealedExternalImageIds: [],
+  alwaysShowImagesFromSenderIds: [],
   completedTaskIds: [],
   dismissedInsightIds: [],
   approvedInsightIds: [],
@@ -322,6 +334,32 @@ export function workspaceReducer(
       return {
         ...state,
         deletedThreadIds: state.deletedThreadIds.filter((id) => id !== action.threadId),
+      };
+    case "DELETE_MESSAGE":
+      if (state.deletedMessageIds.includes(action.messageId)) return state;
+      return {
+        ...state,
+        deletedMessageIds: [...state.deletedMessageIds, action.messageId],
+      };
+    case "RESTORE_DELETED_MESSAGE":
+      return {
+        ...state,
+        deletedMessageIds: state.deletedMessageIds.filter((id) => id !== action.messageId),
+      };
+    case "REVEAL_EXTERNAL_IMAGE":
+      if (state.revealedExternalImageIds.includes(action.imageId)) return state;
+      return {
+        ...state,
+        revealedExternalImageIds: [...state.revealedExternalImageIds, action.imageId],
+      };
+    case "ALWAYS_SHOW_IMAGES_FROM_SENDER":
+      if (state.alwaysShowImagesFromSenderIds.includes(action.senderId)) return state;
+      return {
+        ...state,
+        alwaysShowImagesFromSenderIds: [
+          ...state.alwaysShowImagesFromSenderIds,
+          action.senderId,
+        ],
       };
     case "MARK_THREAD_UNREAD":
       return {

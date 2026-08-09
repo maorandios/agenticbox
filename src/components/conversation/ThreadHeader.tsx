@@ -3,16 +3,13 @@
 import * as React from "react";
 import {
   Archive,
-  BellOff,
   CalendarDays,
   ChevronDown,
+  CircleX,
   Clock3,
   Copy,
   Download,
-  ExternalLink,
   FileText,
-  FolderInput,
-  Link2,
   MessagesSquare,
   MoreHorizontal,
   Paperclip,
@@ -31,9 +28,9 @@ import {
 } from "@/lib/format";
 import {
   CURRENT_USER_ID,
-  getAttachmentsForThread,
   getMessagesForThread,
   getParticipant,
+  getThreadFileItems,
 } from "@/mocks";
 import { IconButton } from "@/components/shared/IconButton";
 import {
@@ -136,7 +133,7 @@ function RecipientRow({
 export function ThreadHeader({ thread }: { thread: Thread }) {
   const { state, dispatch } = useWorkspace();
   const messages = getMessagesForThread(thread.id);
-  const threadAttachments = getAttachmentsForThread(thread.id);
+  const threadAttachments = getThreadFileItems(thread.id);
   const [recipientsExpanded, setRecipientsExpanded] = React.useState(false);
   const [askOpen, setAskOpen] = React.useState(false);
   const [askQuery, setAskQuery] = React.useState("");
@@ -168,7 +165,6 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
   const messageCount = messages.length;
   const starred = state.starredThreadIds.includes(thread.id);
   const archived = state.archivedThreadIds.includes(thread.id);
-  const muted = state.mutedThreadIds.includes(thread.id);
 
   const sortedAttachments = [...threadAttachments].sort((a, b) => {
     const msgA = messages.find((m) => m.id === a.messageId);
@@ -215,7 +211,8 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
   };
 
   return (
-    <header className="sticky top-0 z-20 shrink-0 border-b border-[var(--border)] bg-white/95 px-8 py-3 backdrop-blur-sm">
+    <header className="sticky top-0 z-20 shrink-0 bg-white/95 backdrop-blur-sm">
+      <div className="border-b border-[var(--border)] px-8 py-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="truncate text-[16px] font-semibold tracking-tight text-[var(--text-primary)]">
@@ -295,6 +292,11 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
                                   <div className="truncate text-[12.5px] font-medium text-[var(--text-primary)]">
                                     <bdi>{file.fileName}</bdi>
                                   </div>
+                                  {file.appearsInBody ? (
+                                    <div className="mt-1 inline-flex rounded-[6px] border border-[var(--border)] px-1.5 py-0.5 text-[10.5px] text-[var(--text-secondary)]">
+                                      מופיעה בגוף ההודעה
+                                    </div>
+                                  ) : null}
                                   <div className="mt-0.5 text-[11px] text-[var(--text-muted)]">
                                     {file.sizeLabel}
                                     {sender ? (
@@ -348,6 +350,35 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
             <TooltipTrigger asChild>
               <button
                 type="button"
+                aria-label="חיפוש"
+                aria-expanded={askOpen}
+                aria-pressed={askOpen}
+                onClick={() => {
+                  if (askOpen) {
+                    setAskOpen(false);
+                    setAnswerOpen(false);
+                    setAskQuery("");
+                  } else {
+                    setAskOpen(true);
+                  }
+                }}
+                className={cn(
+                  "inline-flex size-10 items-center justify-center rounded-[var(--radius-icon)] transition-colors",
+                  askOpen
+                    ? "bg-[var(--surface-hover)] text-[var(--text-primary)]"
+                    : "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]",
+                )}
+              >
+                <Search className="size-[18px]" strokeWidth={1.75} />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>חיפוש</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
                 aria-label={starred ? "הסר ממועדפים" : "הוסף למועדפים"}
                 aria-pressed={starred}
                 onClick={toggleStar}
@@ -391,10 +422,7 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
               </TooltipTrigger>
               <TooltipContent>עוד פעולות</TooltipContent>
             </Tooltip>
-            <DropdownMenuContent align="end" className="min-w-[220px]">
-              <div className="px-3 py-1.5 text-[11px] font-semibold text-[var(--text-muted)]">
-                טיפול
-              </div>
+            <DropdownMenuContent align="end" className="min-w-[240px]">
               <DropdownMenuItem
                 onSelect={() => {
                   dispatch({ type: "MARK_THREAD_UNREAD", threadId: thread.id });
@@ -410,57 +438,16 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
                     threadId: thread.id,
                     status: "waiting",
                   });
-                  toast("סומן כממתין");
+                  toast("השיחה הועברה לממתינים");
                 }}
               >
-                <span className="inline-flex items-center gap-2">
-                  <Clock3 className="size-4" strokeWidth={1.75} />
-                  סמן כממתין
-                </span>
+                העבר את השיחה לממתינים
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => toast("תזכורת תוגדר מאוחר יותר (מדומה)")}>
-                הזכר לי מאוחר יותר…
+                הזכר לי מאוחר יותר
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => toast("העברה לפרויקט (מדומה)")}>
-                <span className="inline-flex items-center gap-2">
-                  <FolderInput className="size-4" strokeWidth={1.75} />
-                  העבר לפרויקט
-                </span>
-              </DropdownMenuItem>
-
-              <DropdownMenuSeparator />
-              <div className="px-3 py-1.5 text-[11px] font-semibold text-[var(--text-muted)]">
-                שיחה
-              </div>
-              <DropdownMenuItem
-                onSelect={() => {
-                  dispatch({ type: "TOGGLE_MUTE_THREAD", threadId: thread.id });
-                  toast(muted ? "ההתראות הופעלו מחדש" : "ההתראות הושתקו");
-                }}
-              >
-                <span className="inline-flex items-center gap-2">
-                  <BellOff className="size-4" strokeWidth={1.75} />
-                  {muted ? "בטל השתקת התראות" : "השתק התראות"}
-                </span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => toast("פתיחה בתיבה המקורית (מדומה)")}>
-                <span className="inline-flex items-center gap-2">
-                  <ExternalLink className="size-4" strokeWidth={1.75} />
-                  פתח בתיבה המקורית
-                </span>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() =>
-                  copyText(
-                    `${typeof window !== "undefined" ? window.location.origin : ""}/inbox/${thread.id}`,
-                    "קישור לשיחה הועתק",
-                  )
-                }
-              >
-                <span className="inline-flex items-center gap-2">
-                  <Link2 className="size-4" strokeWidth={1.75} />
-                  העתק קישור לשיחה
-                </span>
+                העבר לפרויקט
               </DropdownMenuItem>
 
               <DropdownMenuSeparator />
@@ -468,7 +455,7 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
                 className="text-red-600 focus:bg-red-50 focus:text-red-700"
                 onSelect={() => {
                   dispatch({ type: "DELETE_THREAD", threadId: thread.id });
-                  toast("השיחה נמחקה", {
+                  toast("השיחה הועברה לאשפה", {
                     action: {
                       label: "ביטול",
                       onClick: () =>
@@ -482,7 +469,7 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
               >
                 <span className="inline-flex items-center gap-2">
                   <Trash2 className="size-4" strokeWidth={1.75} />
-                  מחק שיחה
+                  העבר את השיחה לאשפה
                 </span>
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -521,136 +508,127 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
           </Tooltip>
         </div>
       </div>
+      </div>
 
-      <div className="relative mt-2.5">
-        <div
-          className={cn(
-            "flex h-[34px] items-center overflow-hidden rounded-full border border-[var(--border)] transition-[max-width,background-color,box-shadow] duration-200 ease-out",
-            askOpen
-              ? "w-full max-w-[420px] bg-white shadow-[0_0_0_1px_var(--border)]"
-              : "w-fit max-w-[140px] bg-[var(--surface-subtle)] hover:bg-[var(--surface-hover)]",
-          )}
-        >
-          {askOpen ? (
-            <>
-              <input
-                autoFocus
-                value={askQuery}
-                onChange={(e) => setAskQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && askQuery.trim()) {
-                    showAnswer(askQuery.trim());
-                  }
-                  if (e.key === "Escape") {
-                    setAskOpen(false);
-                    setAnswerOpen(false);
-                    setAskQuery("");
-                  }
-                }}
-                onBlur={() => {
-                  if (!askQuery.trim() && !answerOpen) {
-                    setAskOpen(false);
-                  }
-                }}
-                placeholder="מה תרצו לדעת?"
-                className="h-full min-w-0 flex-1 bg-transparent pe-3 ps-2 text-right text-[13px] outline-none placeholder:text-right placeholder:text-[var(--text-muted)]"
-                dir="rtl"
-              />
+      {askOpen ? (
+        <div className="relative border-b border-[var(--border)] px-8 py-2.5">
+          <div className="flex h-[34px] w-full max-w-[420px] items-center overflow-hidden rounded-full border border-[var(--border)] bg-white shadow-[0_0_0_1px_var(--border)]">
+            {askQuery ? (
               <button
                 type="button"
-                aria-label="חיפוש"
-                disabled={!askQuery.trim()}
+                aria-label="נקה טקסט"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => {
-                  if (askQuery.trim()) showAnswer(askQuery.trim());
+                  setAskQuery("");
+                  setAnswerOpen(false);
                 }}
-                className="me-1 flex size-7 shrink-0 items-center justify-center rounded-full bg-[var(--action-primary)] text-white transition-colors hover:bg-[var(--action-primary-hover)] disabled:opacity-35"
+                className="ms-1.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
               >
-                <Search className="size-3.5" strokeWidth={1.75} />
+                <CircleX className="size-4" strokeWidth={1.75} />
               </button>
-            </>
-          ) : (
+            ) : null}
+            <input
+              autoFocus
+              value={askQuery}
+              onChange={(e) => setAskQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && askQuery.trim()) {
+                  showAnswer(askQuery.trim());
+                }
+                if (e.key === "Escape") {
+                  setAskOpen(false);
+                  setAnswerOpen(false);
+                  setAskQuery("");
+                }
+              }}
+              placeholder="מה תרצו לדעת?"
+              className="h-full min-w-0 flex-1 bg-transparent pe-2 ps-2 text-right text-[13px] outline-none placeholder:text-right placeholder:text-[var(--text-muted)]"
+              dir="rtl"
+            />
             <button
               type="button"
-              aria-expanded={false}
-              onClick={() => setAskOpen(true)}
-              className="inline-flex h-full items-center gap-1.5 px-3.5 text-[12px] font-medium text-[var(--text-primary)]"
+              aria-label="חיפוש"
+              disabled={!askQuery.trim()}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                if (askQuery.trim()) showAnswer(askQuery.trim());
+              }}
+              className="me-1 flex size-7 shrink-0 items-center justify-center rounded-full bg-[var(--action-primary)] text-white transition-colors hover:bg-[var(--action-primary-hover)] disabled:opacity-35"
             >
-              <Search className="size-3.5 shrink-0" strokeWidth={1.75} />
-              חיפוש
+              <Search className="size-3.5" strokeWidth={1.75} />
             </button>
-          )}
-        </div>
+          </div>
 
-        {answerOpen ? (
-          <div className="absolute inset-x-0 top-[calc(100%+10px)] z-30 max-w-[420px] overflow-hidden rounded-[16px] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-overlay)]">
-            <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--surface-subtle)] px-3.5 py-2.5">
-              <div className="flex min-w-0 items-center gap-2">
-                <Sparkles
-                  className="size-3.5 shrink-0 text-[var(--text-secondary)]"
-                  strokeWidth={1.75}
-                />
-                <p className="text-[12px] font-semibold text-[var(--text-primary)]">
-                  תשובה מהשרשור
+          {answerOpen ? (
+            <div className="absolute inset-x-8 top-[calc(100%+2px)] z-30 max-w-[420px] overflow-hidden rounded-[16px] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-overlay)]">
+              <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--surface-subtle)] px-3.5 py-2.5">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Sparkles
+                    className="size-3.5 shrink-0 text-[var(--text-secondary)]"
+                    strokeWidth={1.75}
+                  />
+                  <p className="text-[12px] font-semibold text-[var(--text-primary)]">
+                    תשובה מהשרשור
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  aria-label="סגור תשובה"
+                  onClick={() => setAnswerOpen(false)}
+                  className="inline-flex size-7 shrink-0 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-white hover:text-[var(--text-primary)]"
+                >
+                  <X className="size-3.5" strokeWidth={1.75} />
+                </button>
+              </div>
+
+              <div className="px-3.5 py-3">
+                <p className="text-[13.5px] leading-[1.65] text-[var(--text-primary)]">
+                  הכמות האחרונה שסוכמה בשרשור היא{" "}
+                  <span className="font-semibold">65 יחידות</span>, לאחר עדכון מ־40.
+                  מועד היעד שצוין הוא 18 באוגוסט.
                 </p>
               </div>
-              <button
-                type="button"
-                aria-label="סגור תשובה"
-                onClick={() => setAnswerOpen(false)}
-                className="inline-flex size-7 shrink-0 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-white hover:text-[var(--text-primary)]"
-              >
-                <X className="size-3.5" strokeWidth={1.75} />
-              </button>
-            </div>
 
-            <div className="px-3.5 py-3">
-              <p className="text-[13.5px] leading-[1.65] text-[var(--text-primary)]">
-                הכמות האחרונה שסוכמה בשרשור היא{" "}
-                <span className="font-semibold">65 יחידות</span>, לאחר עדכון מ־40.
-                מועד היעד שצוין הוא 18 באוגוסט.
-              </p>
-            </div>
-
-            <div className="border-t border-[var(--border)] px-3.5 py-2.5">
-              <p className="mb-2 text-[11px] font-semibold text-[var(--text-muted)]">
-                מקורות
-              </p>
-              <div className="space-y-2">
-                {(
-                  [
-                    {
-                      id: "msg-city-1",
-                      label: "עדכון הכמות",
-                      quote:
-                        "הכמות עודכנה מ־40 ל־65 יחידות, ולכן נדרש תיאום מחדש של לוח הזמנים.",
-                    },
-                    {
-                      id: "msg-city-5",
-                      label: "מועד היעד",
-                      quote: "נוסף מועד יעד: 18 באוגוסט. ההתקנה תתבצע בשני שלבים.",
-                    },
-                  ] as const
-                ).map((source) => (
-                  <button
-                    key={source.id}
-                    type="button"
-                    onClick={() => highlightSource(source.id)}
-                    className="block w-full border-r-2 border-[var(--action-primary)] pr-3 text-start transition-colors hover:bg-[var(--surface-subtle)]"
-                  >
-                    <span className="block text-[11.5px] font-semibold text-[var(--text-secondary)]">
-                      {source.label}
-                    </span>
-                    <span className="mt-0.5 block text-[12px] leading-5 text-[var(--text-muted)]">
-                      “{source.quote}”
-                    </span>
-                  </button>
-                ))}
+              <div className="border-t border-[var(--border)] px-3.5 py-2.5">
+                <p className="mb-2 text-[11px] font-semibold text-[var(--text-muted)]">
+                  מקורות
+                </p>
+                <div className="space-y-2">
+                  {(
+                    [
+                      {
+                        id: "msg-city-1",
+                        label: "עדכון הכמות",
+                        quote:
+                          "הכמות עודכנה מ־40 ל־65 יחידות, ולכן נדרש תיאום מחדש של לוח הזמנים.",
+                      },
+                      {
+                        id: "msg-city-5",
+                        label: "מועד היעד",
+                        quote: "נוסף מועד יעד: 18 באוגוסט. ההתקנה תתבצע בשני שלבים.",
+                      },
+                    ] as const
+                  ).map((source) => (
+                    <button
+                      key={source.id}
+                      type="button"
+                      onClick={() => highlightSource(source.id)}
+                      className="block w-full border-r-2 border-[var(--action-primary)] pr-3 text-start transition-colors hover:bg-[var(--surface-subtle)]"
+                    >
+                      <span className="block text-[11.5px] font-semibold text-[var(--text-secondary)]">
+                        {source.label}
+                      </span>
+                      <span className="mt-0.5 block text-[12px] leading-5 text-[var(--text-muted)]">
+                        “{source.quote}”
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
-        ) : null}
-      </div>
+          ) : null}
+        </div>
+      ) : null}
     </header>
   );
 }
