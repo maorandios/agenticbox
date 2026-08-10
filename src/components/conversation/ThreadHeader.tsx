@@ -7,7 +7,6 @@ import {
   ChevronDown,
   CircleX,
   Clock3,
-  Copy,
   Download,
   MessagesSquare,
   MoreHorizontal,
@@ -66,22 +65,19 @@ async function copyText(value: string, success: string) {
 
 function RecipientChip({ person }: { person: Participant }) {
   return (
-    <span className="group/addr inline-flex max-w-full items-center gap-1 rounded-[6px] py-0.5 pe-1 text-[var(--text-secondary)]">
+    <button
+      type="button"
+      aria-label={`העתק ${person.email}`}
+      onClick={() => copyText(person.email, "כתובת המייל הועתקה")}
+      className="inline-flex max-w-full items-center rounded-[6px] py-0.5 text-start text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+    >
       <span className="truncate text-[12.5px]">
         <bdi>{person.name}</bdi>{" "}
         <span className="text-[11.5px]" dir="ltr">
           &lt;{person.email}&gt;
         </span>
       </span>
-      <button
-        type="button"
-        aria-label={`העתק ${person.email}`}
-        onClick={() => copyText(person.email, "כתובת המייל הועתקה")}
-        className="inline-flex size-5 shrink-0 items-center justify-center rounded-[4px] text-[var(--text-muted)] opacity-0 transition-opacity duration-[130ms] group-hover/addr:opacity-100 hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
-      >
-        <Copy className="size-3" strokeWidth={1.75} />
-      </button>
-    </span>
+    </button>
   );
 }
 
@@ -155,10 +151,6 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
 
   const me = getParticipant(CURRENT_USER_ID);
   const infoPeople = me ? [me] : [];
-
-  const allAddresses = [...actionPeople, ...infoPeople]
-    .map((p) => `${p.name} <${p.email}>`)
-    .join(", ");
 
   const firstMessage = messages[0];
   const lastMessage = messages[messages.length - 1];
@@ -363,13 +355,13 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
                   }
                 }}
                 className={cn(
-                  "inline-flex size-10 items-center justify-center rounded-[var(--radius-icon)] transition-colors",
+                  "inline-flex size-9 items-center justify-center rounded-[var(--radius-icon)] transition-colors",
                   askOpen
                     ? "bg-[var(--surface-hover)] text-[var(--text-primary)]"
                     : "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]",
                 )}
               >
-                <Search className="size-[18px]" strokeWidth={1.75} />
+                <Search className="size-[16px]" strokeWidth={1.75} />
               </button>
             </TooltipTrigger>
             <TooltipContent>חיפוש</TooltipContent>
@@ -383,14 +375,14 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
                 aria-pressed={starred}
                 onClick={toggleStar}
                 className={cn(
-                  "inline-flex size-10 items-center justify-center rounded-[var(--radius-icon)] transition-colors",
+                  "inline-flex size-9 items-center justify-center rounded-[var(--radius-icon)] transition-colors",
                   starred
                     ? "text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
                     : "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]",
                 )}
               >
                 <Star
-                  className="size-[18px]"
+                  className="size-[16px]"
                   strokeWidth={1.75}
                   fill={starred ? "currentColor" : "none"}
                 />
@@ -403,8 +395,9 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
             label={archived ? "כבר בארכיון" : "העבר לארכיון"}
             onClick={archiveThread}
             disabled={archived}
+            className="size-9"
           >
-            <Archive className="size-[18px]" strokeWidth={1.75} />
+            <Archive className="size-[16px]" strokeWidth={1.75} />
           </IconButton>
 
           <DropdownMenu>
@@ -414,9 +407,9 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
                   <button
                     type="button"
                     aria-label="עוד פעולות"
-                    className="inline-flex size-10 items-center justify-center rounded-[var(--radius-icon)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+                    className="inline-flex size-9 items-center justify-center rounded-[var(--radius-icon)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
                   >
-                    <MoreHorizontal className="size-[18px]" strokeWidth={1.75} />
+                    <MoreHorizontal className="size-[16px]" strokeWidth={1.75} />
                   </button>
                 </DropdownMenuTrigger>
               </TooltipTrigger>
@@ -478,35 +471,18 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
       </div>
 
       <div className="mt-2.5 space-y-1">
-        <div className="flex items-start gap-2">
-          <div className="min-w-0 flex-1 space-y-1">
-            <RecipientRow
-              label="לפעולה"
-              people={actionPeople}
-              expanded={recipientsExpanded}
-              onExpandHidden={() => setRecipientsExpanded(true)}
-            />
-            <RecipientRow
-              label="לידיעה"
-              people={infoPeople}
-              expanded={recipientsExpanded}
-              onExpandHidden={() => setRecipientsExpanded(true)}
-            />
-          </div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-label="העתק את כל הכתובות"
-                onClick={() => copyText(allAddresses, "כל הכתובות הועתקו")}
-                className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-[8px] text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
-              >
-                <Copy className="size-3.5" strokeWidth={1.75} />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>העתק את כל הכתובות</TooltipContent>
-          </Tooltip>
-        </div>
+        <RecipientRow
+          label="לפעולה"
+          people={actionPeople}
+          expanded={recipientsExpanded}
+          onExpandHidden={() => setRecipientsExpanded(true)}
+        />
+        <RecipientRow
+          label="לידיעה"
+          people={infoPeople}
+          expanded={recipientsExpanded}
+          onExpandHidden={() => setRecipientsExpanded(true)}
+        />
       </div>
       </div>
 

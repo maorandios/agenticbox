@@ -4,7 +4,6 @@ import * as React from "react";
 import {
   Bold,
   ChevronDown,
-  FileText,
   Forward,
   Italic,
   Paperclip,
@@ -28,6 +27,7 @@ import {
   getParticipant,
   messages as allMessages,
 } from "@/mocks";
+import { ComposerAttachmentCard } from "@/components/conversation/ComposerAttachmentCard";
 import {
   Popover,
   PopoverContent,
@@ -49,6 +49,7 @@ type RecipientField = "to" | "cc" | "bcc";
 type ComposerAttachment = {
   id: string;
   fileName: string;
+  mimeType: string;
   sizeLabel: string;
   progress: number;
   cancelled?: boolean;
@@ -76,6 +77,8 @@ const TEXT_COLORS = [
   { id: "yellow", label: "צהוב", value: "#ca8a04" },
   { id: "green", label: "ירוק", value: "#16a34a" },
 ] as const;
+
+const VISIBLE_ATTACHMENT_CARDS = 5;
 
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} ב׳`;
@@ -561,12 +564,8 @@ function RecipientSummaryRows({
   );
 }
 
-function recipientSummary(to: Participant[], cc: Participant[]) {
-  const format = (people: Participant[]) =>
-    people.map((p) => p.email).join(", ");
-  const toPart = to.length ? `אל ${format(to)}` : "אל —";
-  const ccPart = cc.length ? `לידיעה ${format(cc)}` : "";
-  return ccPart ? `${toPart}  |  ${ccPart}` : toPart;
+function formatRecipientEmails(people: Participant[]) {
+  return people.map((p) => p.email).join(", ");
 }
 
 function resolveRecipientsForMode(
@@ -640,6 +639,7 @@ export function Composer({
   const [focused, setFocused] = React.useState(false);
   const [formatOpen, setFormatOpen] = React.useState(false);
   const [composerTall, setComposerTall] = React.useState(false);
+  const [attachmentsExpanded, setAttachmentsExpanded] = React.useState(false);
   const [forwardSourceOpen, setForwardSourceOpen] = React.useState(false);
   const [attachments, setAttachments] = React.useState<ComposerAttachment[]>([]);
   const [to, setTo] = React.useState<Participant[]>([]);
@@ -898,6 +898,7 @@ export function Composer({
     const item: ComposerAttachment = {
       id,
       fileName: file.name,
+      mimeType: file.type || "application/octet-stream",
       sizeLabel: formatSize(file.size),
       progress: 0,
     };
@@ -918,11 +919,15 @@ export function Composer({
   };
 
   const cancelAttachment = (id: string) => {
-    setAttachments((prev) =>
-      prev
+    setAttachments((prev) => {
+      const next = prev
         .map((a) => (a.id === id ? { ...a, cancelled: true, progress: 0 } : a))
-        .filter((a) => a.id !== id),
-    );
+        .filter((a) => a.id !== id);
+      if (next.length <= VISIBLE_ATTACHMENT_CARDS) {
+        setAttachmentsExpanded(false);
+      }
+      return next;
+    });
   };
 
   const clearDraft = () => {
@@ -930,6 +935,7 @@ export function Composer({
     const previousAttachments = attachments;
     setEditorText("");
     setAttachments([]);
+    setAttachmentsExpanded(false);
     dispatch({ type: "CLEAR_COMPOSER_DRAFT_CONTEXT" });
     toast("הטיוטה נמחקה", {
       action: {
@@ -955,6 +961,7 @@ export function Composer({
     });
     setEditorText("");
     setAttachments([]);
+    setAttachmentsExpanded(false);
     dispatch({ type: "CLEAR_COMPOSER_DRAFT_CONTEXT" });
     setFocused(false);
     setAddingField(null);
@@ -969,7 +976,6 @@ export function Composer({
     }
   };
 
-  const summary = recipientSummary(to, cc);
   const forwardSourceBody = lastInbound?.body ?? lastMessage?.body ?? "";
   const showNeedsYouEmpty =
     draftActionCount > 0 &&
@@ -986,17 +992,16 @@ export function Composer({
   };
 
   return (
-    <div className="sticky bottom-0 z-20 shrink-0 border-t border-[var(--border)] bg-white px-8 py-3">
+    <div className="sticky bottom-0 z-20 shrink-0 border-t border-[var(--border)] bg-white">
       <div
         ref={rootRef}
         className={cn(
-          "overflow-hidden rounded-[16px] border bg-white transition-[min-height,box-shadow,border-color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+          "overflow-hidden bg-white transition-[min-height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
           expanded
-            ? cn(
-                "border-[var(--border-strong)] shadow-[0_1px_0_rgba(33,37,41,0.04)]",
-                composerTall ? "min-h-[420px]" : "min-h-[193px]",
-              )
-            : "min-h-[58px] border-[var(--border)] hover:border-[var(--border-strong)]",
+            ? composerTall
+              ? "min-h-[546px]"
+              : "min-h-[251px]"
+            : "min-h-[58px]",
         )}
         onFocusCapture={() => setFocused(true)}
       >
@@ -1011,7 +1016,7 @@ export function Composer({
             <button
               type="button"
               tabIndex={expanded ? -1 : 0}
-              className="flex h-[58px] w-full items-center gap-3 px-3.5 text-start"
+              className="flex h-[58px] w-full items-center gap-3 px-8 text-start"
               onClick={openComposer}
             >
               <div className="min-w-0 flex-1">
@@ -1029,16 +1034,31 @@ export function Composer({
                     {MODE_LABEL[mode]}
                   </span>
                 </div>
-                <p className="mt-0.5 truncate text-[13px] leading-snug text-[var(--text-muted)]">
-                  {summary}
-                </p>
+                <div className="mt-0.5 flex min-w-0 items-baseline gap-x-3 overflow-hidden text-[12.5px] leading-snug text-[var(--text-muted)]">
+                  <p className="min-w-0 truncate">
+                    <span className="font-medium text-[var(--text-secondary)]">
+                      אל
+                    </span>
+                    <span className="mx-1.5">
+                      {to.length ? (
+                        <bdi>{formatRecipientEmails(to)}</bdi>
+                      ) : (
+                        "—"
+                      )}
+                    </span>
+                  </p>
+                  {cc.length > 0 ? (
+                    <p className="min-w-0 truncate">
+                      <span className="font-medium text-[var(--text-secondary)]">
+                        לידיעה
+                      </span>
+                      <span className="mx-1.5">
+                        <bdi>{formatRecipientEmails(cc)}</bdi>
+                      </span>
+                    </p>
+                  ) : null}
+                </div>
               </div>
-              <span className="inline-flex size-8 items-center justify-center rounded-[8px] text-[var(--text-muted)]">
-                <Paperclip className="size-[17px]" strokeWidth={1.75} />
-              </span>
-              <span className="inline-flex size-8 items-center justify-center rounded-full text-[var(--text-muted)] opacity-45">
-                <Send className="size-[17px]" strokeWidth={1.75} />
-              </span>
             </button>
           </div>
         </div>
@@ -1057,10 +1077,10 @@ export function Composer({
           <div
             className={cn(
               "flex flex-col transition-[min-height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-              composerTall ? "min-h-[420px]" : "min-h-[193px]",
+              composerTall ? "min-h-[546px]" : "min-h-[251px]",
             )}
           >
-            <div className="border-b border-[var(--border)] bg-[var(--surface-subtle)] px-3.5 py-2">
+            <div className="border-b border-[var(--border)] bg-[var(--surface-subtle)] px-8 py-2">
               <RecipientSummaryRows
                 to={to}
                 cc={cc}
@@ -1131,47 +1151,12 @@ export function Composer({
                         </Tooltip>
                       );
                     })}
-                    <span
-                      className="mx-0.5 h-3.5 w-px shrink-0 bg-[var(--border)]"
-                      aria-hidden
-                    />
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          aria-label="סגירה"
-                          onClick={() => {
-                            setFocused(false);
-                            setAddingField(null);
-                            setFormatOpen(false);
-                            setComposerTall(false);
-                            if (!hasContent) {
-                              setPreferManualWrite(false);
-                            }
-                          }}
-                          className="inline-flex size-7 items-center justify-center rounded-[6px] text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
-                        >
-                          <X className="size-3" strokeWidth={1.75} />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom">סגירה</TooltipContent>
-                    </Tooltip>
                   </div>
                 }
               />
 
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                {draftStatus === "saving" ? (
-                  <span className="text-[11px] text-[var(--text-muted)]">
-                    שומר…
-                  </span>
-                ) : draftStatus === "saved" ? (
-                  <span className="text-[11px] text-[var(--text-muted)]">
-                    נשמר
-                  </span>
-                ) : null}
-
-                {showDraftChip ? (
+              {showDraftChip ? (
+                <div className="mt-1 flex flex-wrap items-center gap-2">
                   <span className="inline-flex max-w-[200px] items-center gap-1 rounded-[999px] bg-white py-0.5 ps-2 pe-0.5 text-[11px] text-[var(--text-secondary)] ring-1 ring-[var(--border)]">
                     <span className="truncate">
                       {draftActionCount === 1
@@ -1187,12 +1172,12 @@ export function Composer({
                       <X className="size-3" strokeWidth={1.75} />
                     </button>
                   </span>
-                ) : null}
-              </div>
+                </div>
+              ) : null}
             </div>
 
             {mode === "forward" ? (
-              <div className="px-3.5 pt-1.5">
+              <div className="px-8 pt-1.5">
                 <button
                   type="button"
                   onClick={() => setForwardSourceOpen((v) => !v)}
@@ -1225,12 +1210,12 @@ export function Composer({
               </div>
             ) : null}
 
-            <div className="relative flex min-h-0 flex-1 flex-col px-3.5 pt-2.5 pb-2">
+            <div className="relative flex min-h-0 flex-1 flex-col px-8 pt-2.5 pb-2">
               {drafting ? (
                 <div
                   className={cn(
                     "flex flex-1 items-center text-[15px] text-[var(--text-muted)] transition-[min-height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                    composerTall ? "min-h-[280px]" : "min-h-[108px]",
+                    composerTall ? "min-h-[364px]" : "min-h-[140px]",
                   )}
                 >
                   מנסח תשובה…
@@ -1239,7 +1224,7 @@ export function Composer({
                 <div
                   className={cn(
                     "flex flex-1 flex-col items-start justify-center gap-3 py-1 transition-[min-height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                    composerTall ? "min-h-[280px]" : "min-h-[108px]",
+                    composerTall ? "min-h-[364px]" : "min-h-[140px]",
                   )}
                 >
                   <p className="text-[14px] leading-snug text-[var(--text-secondary)]">
@@ -1273,51 +1258,54 @@ export function Composer({
                   className={cn(
                     "composer-editor flex-1 overflow-y-auto text-start text-[15px] leading-[1.65] outline-none transition-[min-height,max-height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
                     composerTall
-                      ? "max-h-[480px] min-h-[280px]"
-                      : "max-h-[210px] min-h-[108px]",
+                      ? "max-h-[624px] min-h-[364px]"
+                      : "max-h-[273px] min-h-[140px]",
                   )}
                   dir="rtl"
                 />
               )}
 
               {attachments.length > 0 ? (
-                <ul className="mt-2 space-y-0.5">
-                  {attachments.map((file) => (
-                    <li
-                      key={file.id}
-                      className="flex h-8 items-center gap-2 text-[12px]"
+                <div className="mt-2 flex flex-wrap items-center gap-2.5">
+                  <ul
+                    className={cn(
+                      "flex gap-2.5",
+                      attachmentsExpanded
+                        ? "flex-wrap"
+                        : "flex-nowrap",
+                    )}
+                  >
+                    {(attachmentsExpanded
+                      ? attachments
+                      : attachments.slice(0, VISIBLE_ATTACHMENT_CARDS)
+                    ).map((file) => (
+                      <li key={file.id} className="shrink-0 pt-1.5 pe-1.5">
+                        <ComposerAttachmentCard
+                          fileName={file.fileName}
+                          mimeType={file.mimeType}
+                          sizeLabel={file.sizeLabel}
+                          progress={file.progress}
+                          onRemove={() => cancelAttachment(file.id)}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                  {attachments.length > VISIBLE_ATTACHMENT_CARDS ? (
+                    <button
+                      type="button"
+                      onClick={() => setAttachmentsExpanded((v) => !v)}
+                      className="shrink-0 text-[11.5px] font-medium whitespace-nowrap text-[var(--text-muted)] transition-colors hover:text-[var(--text-secondary)]"
                     >
-                      <FileText
-                        className="size-3.5 shrink-0 text-[var(--text-secondary)]"
-                        strokeWidth={1.75}
-                      />
-                      <span className="min-w-0 flex-1 truncate text-[var(--text-primary)]">
-                        <bdi>{file.fileName}</bdi>
-                        <span className="text-[var(--text-muted)]">
-                          {" "}
-                          · {file.sizeLabel}
-                        </span>
-                      </span>
-                      {file.progress < 100 ? (
-                        <span className="shrink-0 text-[var(--text-muted)]">
-                          {file.progress}%
-                        </span>
-                      ) : null}
-                      <button
-                        type="button"
-                        aria-label="הסר קובץ"
-                        onClick={() => cancelAttachment(file.id)}
-                        className="inline-flex size-7 items-center justify-center rounded-[8px] text-[var(--text-muted)] hover:bg-[var(--surface-hover)]"
-                      >
-                        <X className="size-3.5" strokeWidth={1.75} />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                      {attachmentsExpanded
+                        ? "הסתר קבצים"
+                        : `הצג את כל הקבצים (${attachments.length})`}
+                    </button>
+                  ) : null}
+                </div>
               ) : null}
             </div>
 
-            <div className="flex items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--surface-subtle)] px-3 py-2">
+            <div className="flex items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--surface-subtle)] px-8 py-2">
               <div className="flex items-center gap-1">
                 <input
                   ref={fileInputRef}
@@ -1451,20 +1439,40 @@ export function Composer({
                 ) : null}
               </div>
 
-              <button
-                type="button"
-                disabled={!hasContent || drafting}
-                onClick={send}
-                className={cn(
-                  "inline-flex h-9 items-center gap-2 rounded-[999px] px-4 text-[13px] font-medium transition-colors",
-                  hasContent && !drafting
-                    ? "bg-[var(--action-primary)] text-white hover:bg-[var(--action-primary-hover)]"
-                    : "bg-white text-[var(--text-muted)] ring-1 ring-[var(--border)]",
-                )}
-              >
-                <Send className="size-[17px]" strokeWidth={1.75} />
-                שליחה
-              </button>
+              <div className="flex items-center gap-2.5">
+                {draftStatus === "saving" ? (
+                  <span className="inline-flex items-center gap-1.5 text-[10.8px] text-[var(--text-secondary)]">
+                    <span
+                      className="size-1.5 shrink-0 rounded-full bg-[#e67e22]"
+                      aria-hidden
+                    />
+                    שומר שינויים
+                  </span>
+                ) : draftStatus === "saved" ? (
+                  <span className="inline-flex items-center gap-1.5 text-[10.8px] text-[var(--text-secondary)]">
+                    <span
+                      className="size-1.5 shrink-0 rounded-full bg-[#2f9e44]"
+                      aria-hidden
+                    />
+                    נשמר כטיוטא
+                  </span>
+                ) : null}
+
+                <button
+                  type="button"
+                  disabled={!hasContent || drafting}
+                  onClick={send}
+                  className={cn(
+                    "inline-flex h-9 items-center gap-2 rounded-[999px] px-4 text-[13px] font-medium transition-colors",
+                    hasContent && !drafting
+                      ? "bg-[var(--action-primary)] text-white hover:bg-[var(--action-primary-hover)]"
+                      : "bg-white text-[var(--text-muted)] ring-1 ring-[var(--border)]",
+                  )}
+                >
+                  <Send className="size-[17px]" strokeWidth={1.75} />
+                  שליחה
+                </button>
+              </div>
             </div>
           </div>
           </div>

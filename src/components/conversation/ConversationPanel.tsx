@@ -439,7 +439,13 @@ function AttachmentStack({
   );
 }
 
-function MessageToolbar({ message }: { message: Message }) {
+function MessageToolbar({
+  message,
+  dark,
+}: {
+  message: Message;
+  dark: boolean;
+}) {
   const { dispatch } = useWorkspace();
 
   const actions = [
@@ -490,7 +496,15 @@ function MessageToolbar({ message }: { message: Message }) {
   ];
 
   return (
-    <div className="mt-[5px] flex justify-end gap-0.5" dir="rtl">
+    <div
+      className={cn(
+        "flex w-full items-center justify-end gap-0.5 border-t px-2.5 py-1",
+        dark
+          ? "border-white/25 bg-[#2f363f]"
+          : "border-[var(--border)] bg-[#fafbfc]",
+      )}
+      dir="rtl"
+    >
       {actions.map((item) => (
         <Tooltip key={item.label}>
           <TooltipTrigger asChild>
@@ -499,10 +513,12 @@ function MessageToolbar({ message }: { message: Message }) {
               aria-label={item.label}
               onClick={item.onClick}
               className={cn(
-                "inline-flex size-7 items-center justify-center rounded-[8px] text-[var(--text-secondary)] opacity-80 transition-all duration-[120ms] ease-out hover:bg-[var(--surface-hover)] hover:opacity-100",
-                item.destructive
-                  ? "hover:text-red-600"
-                  : "hover:text-[var(--text-primary)]",
+                "inline-flex size-7 shrink-0 items-center justify-center rounded-[8px] transition-all duration-[120ms] ease-out",
+                dark
+                  ? "text-white hover:bg-white/15"
+                  : "text-[var(--text-secondary)] opacity-80 hover:bg-white hover:opacity-100 hover:text-[var(--text-primary)]",
+                item.destructive && !dark && "hover:text-red-600",
+                item.destructive && dark && "hover:text-red-300",
               )}
             >
               <item.icon className="size-4" strokeWidth={1.75} />
@@ -576,48 +592,50 @@ function MessageBubble({
         <div className="min-w-0">
           <div
             className={cn(
-              "relative w-fit max-w-full rounded-[16px] px-[18px] py-4 transition-[box-shadow] duration-[140ms]",
+              "relative w-fit max-w-full overflow-hidden rounded-[16px] transition-[box-shadow] duration-[140ms]",
               mine
                 ? "border border-[var(--border)] bg-[var(--surface-outgoing)] text-[var(--text-primary)]"
                 : "bg-[var(--surface-incoming)] text-white",
               highlighted && "ring-2 ring-[var(--border-strong)] ring-offset-2",
             )}
           >
+            <div className="px-[18px] py-4">
             <div
               className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1"
               dir="rtl"
             >
-              <span
-                className={cn(
-                  "text-[13.5px] font-semibold",
-                  dark ? "text-white" : "text-[var(--text-primary)]",
-                )}
-              >
-                <bdi>{sender?.name ?? "לא ידוע"}</bdi>
-              </span>
-
               {sender?.email ? (
                 <span
                   className={cn(
-                    "group/mail inline-flex items-center gap-1 text-[11.5px]",
+                    "text-[11.5px]",
                     dark ? "text-white/65" : "text-[var(--text-muted)]",
                   )}
                   dir="ltr"
                 >
                   <bdi>{sender.email}</bdi>
-                  <button
-                    type="button"
-                    aria-label="העתק כתובת מייל"
-                    onClick={() => copyText(sender.email, "כתובת המייל הועתקה")}
-                    className={cn(
-                      "inline-flex size-5 items-center justify-center rounded-[4px] opacity-0 transition-opacity group-hover/mail:opacity-100 focus-visible:opacity-100",
-                      dark ? "hover:bg-white/10" : "hover:bg-black/5",
-                    )}
-                  >
-                    <Copy className="size-3" strokeWidth={1.75} />
-                  </button>
                 </span>
               ) : null}
+
+              {sender?.email && sender?.name ? (
+                <span
+                  className={cn(
+                    "text-[11.5px]",
+                    dark ? "text-white/65" : "text-[var(--text-muted)]",
+                  )}
+                  aria-hidden
+                >
+                  ·
+                </span>
+              ) : null}
+
+              <span
+                className={cn(
+                  "text-[11.5px]",
+                  dark ? "text-white/65" : "text-[var(--text-muted)]",
+                )}
+              >
+                <bdi>{sender?.name ?? "לא ידוע"}</bdi>
+              </span>
 
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -731,9 +749,10 @@ function MessageBubble({
                 <ReplyToBlock source={repliedTo} dark={dark} />
               </div>
             ) : null}
-          </div>
+            </div>
 
-          <MessageToolbar message={message} />
+            <MessageToolbar message={message} dark={dark} />
+          </div>
         </div>
       </div>
     </article>
