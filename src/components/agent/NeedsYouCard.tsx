@@ -343,7 +343,7 @@ export function NeedsYouCard({
               text: draftText,
               actionCount: active.length,
             });
-            toast.success("טיוטת תשובה הוכנסה ל־Composer");
+            toast.success("מנסח תשובה ב־Composer");
           }}
           className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius-pill)] bg-white px-3.5 text-[12px] font-medium text-[var(--action-primary)] transition-colors duration-[140ms] hover:bg-white/90"
         >

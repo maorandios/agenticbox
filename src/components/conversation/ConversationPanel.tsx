@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import {
-  Bold,
   ChevronDown,
   ChevronUp,
   Copy,
@@ -12,8 +11,6 @@ import {
   Paperclip,
   Reply,
   ReplyAll,
-  Send,
-  Sparkles,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -25,30 +22,23 @@ import {
   formatQuotedMessageStamp,
 } from "@/lib/format";
 import { getDisplayInitials } from "@/lib/initials";
+import { sleep } from "@/lib/sleep";
 import {
   CURRENT_USER_ID,
   getBubbleAttachments,
   getMessagesForThread,
   getParticipant,
   getThread,
-  getThreadSnapshot,
   resolveRepliedToMessage,
 } from "@/mocks";
 import { AttachmentTypeIcon } from "@/components/conversation/AttachmentTypeIcon";
+import { Composer } from "@/components/conversation/Composer";
 import { MessageBody } from "@/components/conversation/MessageBody";
 import {
   SignatureSnapshotAffordance,
   SignatureSnapshotCard,
 } from "@/components/conversation/SignatureContactCard";
 import { ThreadHeader } from "@/components/conversation/ThreadHeader";
-import { IconButton } from "@/components/shared/IconButton";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -457,24 +447,21 @@ function MessageToolbar({ message }: { message: Message }) {
       label: "השב",
       icon: Reply,
       onClick: () => {
-        dispatch({ type: "SET_COMPOSER_MODE", mode: "reply" });
-        toast("מצב השב");
+        dispatch({ type: "FOCUS_COMPOSER", mode: "reply" });
       },
     },
     {
       label: "השב לכולם",
       icon: ReplyAll,
       onClick: () => {
-        dispatch({ type: "SET_COMPOSER_MODE", mode: "replyAll" });
-        toast("מצב השב לכולם");
+        dispatch({ type: "FOCUS_COMPOSER", mode: "replyAll" });
       },
     },
     {
       label: "העבר",
       icon: Forward,
       onClick: () => {
-        dispatch({ type: "SET_COMPOSER_MODE", mode: "forward" });
-        toast("מצב העבר");
+        dispatch({ type: "FOCUS_COMPOSER", mode: "forward" });
       },
     },
     {
@@ -753,44 +740,26 @@ function MessageBubble({
   );
 }
 
-function AutoGrowTextarea({
-  value,
-  onChange,
-  placeholder,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-}) {
-  const ref = React.useRef<HTMLTextAreaElement>(null);
+type OutboundStatus = "sending" | "sent" | "failed";
 
-  React.useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(Math.max(el.scrollHeight, 72), 180)}px`;
-  }, [value]);
-
-  return (
-    <textarea
-      ref={ref}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      rows={2}
-      className="min-h-[72px] max-h-[180px] w-full resize-none overflow-y-auto bg-transparent text-[15px] leading-6 outline-none transition-[height] duration-[160ms] ease-out placeholder:text-[var(--text-muted)]"
-      dir="auto"
-    />
-  );
-}
+type PendingOutbound = Message & {
+  sendStatus: OutboundStatus;
+};
 
 export function ConversationPanel({ threadId }: { threadId: string }) {
   const thread = getThread(threadId);
   const { state, dispatch } = useWorkspace();
-  const messages = getMessagesForThread(threadId).filter(
+  const [pendingOutbound, setPendingOutbound] = React.useState<PendingOutbound[]>(
+    [],
+  );
+
+  const baseMessages = getMessagesForThread(threadId).filter(
     (message) => !state.deletedMessageIds.includes(message.id),
   );
-  const snapshot = getThreadSnapshot(threadId);
+  const messages = [
+    ...baseMessages,
+    ...pendingOutbound.filter((m) => m.threadId === threadId),
+  ].sort((a, b) => a.sentAt.localeCompare(b.sentAt));
 
   React.useEffect(() => {
     if (!state.highlightedMessageId) return;
@@ -804,27 +773,34 @@ export function ConversationPanel({ threadId }: { threadId: string }) {
 
   if (!thread) return null;
 
-  const toPeople = thread.participantIds
-    .filter((id) => id !== CURRENT_USER_ID)
-    .map((id) => getParticipant(id))
-    .filter((p): p is Participant => Boolean(p));
-
-  const me = getParticipant(CURRENT_USER_ID);
-  const ccPeople = me ? [me] : [];
-
-  const modeLabel =
-    state.composer.mode === "forward"
-      ? "מעביר"
-      : state.composer.mode === "reply"
-        ? "משיב"
-        : "משיב לכולם";
-
-  const toNames = toPeople.map((p) => p.name.split(" ")[0]).join(" ו");
-  const composerRecipients = `אל ${toNames || "נמענים"}${
-    ccPeople.length ? ` · עותק ${ccPeople[0].name.split(" ")[0]}` : ""
-  }`;
-
-  const draftActionCount = state.composer.draftActionCount ?? 0;
+  const handleSend = async ({
+    body,
+    toIds,
+    ccIds,
+  }: {
+    body: string;
+    mode: string;
+    toIds: string[];
+    ccIds: string[];
+  }) => {
+    const id = `pending-${Date.now()}`;
+    const message: PendingOutbound = {
+      id,
+      threadId,
+      fromId: CURRENT_USER_ID,
+      toIds: toIds.length ? toIds : thread.participantIds.filter((pid) => pid !== CURRENT_USER_ID),
+      ccIds,
+      sentAt: new Date().toISOString(),
+      body,
+      isOutbound: true,
+      sendStatus: "sending",
+    };
+    setPendingOutbound((prev) => [...prev, message]);
+    await sleep(700);
+    setPendingOutbound((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, sendStatus: "sent" } : m)),
+    );
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
@@ -832,114 +808,46 @@ export function ConversationPanel({ threadId }: { threadId: string }) {
 
       <div className="thin-scroll min-h-0 flex-1 space-y-5 overflow-y-auto px-8 py-5">
         {messages.map((message) => (
-          <MessageBubble
-            key={message.id}
-            message={message}
-            highlighted={state.highlightedMessageId === message.id}
-          />
+          <div key={message.id} className="space-y-1">
+            <MessageBubble
+              message={message}
+              highlighted={state.highlightedMessageId === message.id}
+            />
+            {"sendStatus" in message && message.sendStatus === "sending" ? (
+              <p className="px-2 text-end text-[11.5px] text-[var(--text-muted)]">
+                שולח…
+              </p>
+            ) : null}
+            {"sendStatus" in message && message.sendStatus === "failed" ? (
+              <div className="flex items-center justify-end gap-2 px-2 text-[11.5px] text-[var(--text-secondary)]">
+                <span>השליחה נכשלה</span>
+                <button
+                  type="button"
+                  className="font-medium hover:text-[var(--text-primary)]"
+                  onClick={() => {
+                    setPendingOutbound((prev) =>
+                      prev.map((m) =>
+                        m.id === message.id ? { ...m, sendStatus: "sending" } : m,
+                      ),
+                    );
+                    void sleep(700).then(() => {
+                      setPendingOutbound((prev) =>
+                        prev.map((m) =>
+                          m.id === message.id ? { ...m, sendStatus: "sent" } : m,
+                        ),
+                      );
+                    });
+                  }}
+                >
+                  נסה שוב
+                </button>
+              </div>
+            ) : null}
+          </div>
         ))}
       </div>
 
-      <div className="sticky bottom-0 z-20 shrink-0 border-t border-[var(--border)] bg-white px-8 py-3">
-        <div className="rounded-[14px] border border-[var(--border)] bg-white px-3.5 pt-2.5 pb-2.5">
-          {draftActionCount > 0 ? (
-            <div className="mb-2 rounded-[8px] bg-[var(--surface-subtle)] px-2.5 py-1.5 text-[12px] text-[var(--text-secondary)]">
-              {draftActionCount === 1
-                ? "הטיוטה מתייחסת לפעולה שנדרשה ממך"
-                : `הטיוטה מתייחסת ל־${draftActionCount} הפעולות שנדרשו ממך`}
-            </div>
-          ) : null}
-
-          <div className="mb-1 flex flex-wrap items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1 rounded-[8px] px-1.5 py-1 text-[12.5px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
-                >
-                  {modeLabel}
-                  <ChevronDown className="size-3.5 text-[var(--text-muted)]" strokeWidth={1.75} />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuItem
-                  onSelect={() => dispatch({ type: "SET_COMPOSER_MODE", mode: "reply" })}
-                >
-                  משיב
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onSelect={() => dispatch({ type: "SET_COMPOSER_MODE", mode: "replyAll" })}
-                >
-                  משיב לכולם
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onSelect={() => dispatch({ type: "SET_COMPOSER_MODE", mode: "forward" })}
-                >
-                  מעביר
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => toast("עריכת To / Cc / Bcc (מדומה)")}>
-                  ערוך אל, עותק ו־Bcc
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <span className="truncate text-[12px] text-[var(--text-muted)]">
-              {composerRecipients}
-            </span>
-          </div>
-
-          <AutoGrowTextarea
-            value={state.composer.text}
-            onChange={(text) => dispatch({ type: "SET_COMPOSER_TEXT", text })}
-            placeholder="כתיבת תשובה..."
-          />
-
-          <div className="mt-1 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-0.5">
-              <IconButton
-                label="צירוף קובץ"
-                onClick={() => toast("צירוף קובץ מדומה — אין העלאה אמיתית")}
-              >
-                <Paperclip className="size-[18px]" strokeWidth={1.75} />
-              </IconButton>
-              <IconButton label="עיצוב טקסט" onClick={() => toast("עיצוב טקסט מדומה")}>
-                <Bold className="size-[18px]" strokeWidth={1.75} />
-              </IconButton>
-              <button
-                type="button"
-                onClick={() => {
-                  const improved =
-                    state.composer.text.trim() ||
-                    snapshot?.primary.draftReply ||
-                    "עמית שלום,\n\nמאשרים את מועד ההתקנה.";
-                  dispatch({ type: "SET_COMPOSER_TEXT", text: improved });
-                  toast("הניסוח שופר (מדומה)");
-                }}
-                className="inline-flex h-9 items-center gap-1.5 rounded-[10px] px-2 text-[12.5px] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
-              >
-                <Sparkles className="size-4" strokeWidth={1.75} />
-                שפר ניסוח
-              </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                if (!state.composer.text.trim()) {
-                  toast.error("יש לכתוב תשובה לפני השליחה");
-                  return;
-                }
-                toast.success("התשובה נשלחה");
-                dispatch({ type: "SET_COMPOSER_TEXT", text: "" });
-              }}
-              className="inline-flex h-9 items-center gap-2 rounded-[var(--radius-pill)] bg-[var(--action-primary)] px-4 text-[13px] font-medium text-white hover:bg-[var(--action-primary-hover)]"
-            >
-              <Send className="size-3.5" strokeWidth={1.75} />
-              שליחה
-            </button>
-          </div>
-        </div>
-      </div>
+      <Composer threadId={threadId} onSend={handleSend} />
     </div>
   );
 }

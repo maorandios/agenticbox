@@ -55,6 +55,11 @@ export type WorkspaceState = {
     draftSavedAt?: string;
     /** When set, composer was opened from NeedsYou actions */
     draftActionCount?: number | null;
+    /** Pending AI draft text while “מנסח תשובה…” shows */
+    pendingDraftText?: string | null;
+    drafting?: boolean;
+    /** Bumps to request focus/expand from outside (insights panel) */
+    focusToken?: number;
   };
   improvePreview: string | null;
   commandMenuOpen: boolean;
@@ -81,6 +86,9 @@ export type WorkspaceAction =
   | { type: "SET_COMPOSER_MODE"; mode: ComposerMode }
   | { type: "SET_COMPOSER_TEXT"; text: string }
   | { type: "SET_COMPOSER_FROM_ACTIONS"; text: string; actionCount: number }
+  | { type: "FOCUS_COMPOSER"; mode?: ComposerMode }
+  | { type: "COMPOSER_DRAFT_READY" }
+  | { type: "CLEAR_COMPOSER_DRAFT_CONTEXT" }
   | { type: "SAVE_DRAFT" }
   | { type: "SET_IMPROVE_PREVIEW"; text: string | null }
   | { type: "SET_COMMAND_MENU"; open: boolean }
@@ -144,9 +152,12 @@ export const initialWorkspaceState: WorkspaceState = {
   userTasks: [],
   primaryActionStates: {},
   composer: {
-    mode: "reply",
+    mode: "replyAll",
     text: "",
     draftActionCount: null,
+    pendingDraftText: null,
+    drafting: false,
+    focusToken: 0,
   },
   improvePreview: null,
   commandMenuOpen: false,
@@ -242,7 +253,6 @@ export function workspaceReducer(
         composer: {
           ...state.composer,
           text: action.text,
-          draftActionCount: null,
         },
       };
     case "SET_COMPOSER_FROM_ACTIONS":
@@ -250,9 +260,41 @@ export function workspaceReducer(
         ...state,
         composer: {
           ...state.composer,
-          text: action.text,
+          text: "",
+          pendingDraftText: action.text,
           draftActionCount: action.actionCount,
+          drafting: true,
           mode: "replyAll",
+          focusToken: (state.composer.focusToken ?? 0) + 1,
+        },
+      };
+    case "FOCUS_COMPOSER":
+      return {
+        ...state,
+        composer: {
+          ...state.composer,
+          mode: action.mode ?? state.composer.mode,
+          focusToken: (state.composer.focusToken ?? 0) + 1,
+        },
+      };
+    case "COMPOSER_DRAFT_READY":
+      return {
+        ...state,
+        composer: {
+          ...state.composer,
+          text: state.composer.pendingDraftText ?? state.composer.text,
+          pendingDraftText: null,
+          drafting: false,
+        },
+      };
+    case "CLEAR_COMPOSER_DRAFT_CONTEXT":
+      return {
+        ...state,
+        composer: {
+          ...state.composer,
+          draftActionCount: null,
+          pendingDraftText: null,
+          drafting: false,
         },
       };
     case "SAVE_DRAFT":

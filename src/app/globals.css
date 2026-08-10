@@ -95,6 +95,12 @@
     unicode-bidi: plaintext;
   }
 
+  .composer-editor:empty:before {
+    content: attr(data-placeholder);
+    color: var(--text-muted);
+    pointer-events: none;
+  }
+
   .thin-scroll {
     scrollbar-width: thin;
     scrollbar-color: var(--border-strong) transparent;
