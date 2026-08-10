@@ -99,6 +99,8 @@
     content: attr(data-placeholder);
     color: var(--text-muted);
     pointer-events: none;
+    display: block;
+    text-align: start;
   }
 
   .thin-scroll {

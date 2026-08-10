@@ -7,17 +7,15 @@ import {
   FileText,
   Forward,
   Italic,
-  Link2,
-  List,
   Paperclip,
   Plus,
   Reply,
   ReplyAll,
   Send,
-  Sparkles,
   TextCursorInput,
   Trash2,
   Underline,
+  UnfoldVertical,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -28,15 +26,8 @@ import {
   CURRENT_USER_ID,
   getMessagesForThread,
   getParticipant,
-  getThreadSnapshot,
   messages as allMessages,
 } from "@/mocks";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Popover,
   PopoverContent,
@@ -63,12 +54,6 @@ type ComposerAttachment = {
   cancelled?: boolean;
 };
 
-type PolishStyle =
-  | "professional"
-  | "shorter"
-  | "friendlier"
-  | "fixes";
-
 const MODE_LABEL: Record<ComposerMode, string> = {
   reply: "השב",
   replyAll: "השב לכולם",
@@ -84,36 +69,18 @@ const MODE_ICON: Record<
   forward: Forward,
 };
 
-const POLISH_LABEL: Record<PolishStyle, string> = {
-  professional: "מקצועי וברור",
-  shorter: "קצר יותר",
-  friendlier: "ידידותי יותר",
-  fixes: "תקן שגיאות בלבד",
-};
+const TEXT_COLORS = [
+  { id: "black", label: "שחור", value: "#212529" },
+  { id: "blue", label: "כחול", value: "#2563eb" },
+  { id: "red", label: "אדום", value: "#dc2626" },
+  { id: "yellow", label: "צהוב", value: "#ca8a04" },
+  { id: "green", label: "ירוק", value: "#16a34a" },
+] as const;
 
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} ב׳`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} ק״ב`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} מ״ב`;
-}
-
-function buildImprovedText(text: string, style: PolishStyle) {
-  const trimmed = text.trim();
-  if (!trimmed) return trimmed;
-  switch (style) {
-    case "shorter":
-      return trimmed
-        .split(/\n+/)
-        .filter(Boolean)
-        .slice(0, 2)
-        .join("\n");
-    case "friendlier":
-      return `היי,\n\n${trimmed}\n\nתודה רבה!`;
-    case "fixes":
-      return trimmed.replace(/\s+/g, " ").trim();
-    default:
-      return `שלום,\n\n${trimmed}\n\nבברכה`;
-  }
 }
 
 function ToolIconButton({
@@ -412,9 +379,9 @@ function RecipientAddInput({
             else onCancel();
           }, 120);
         }}
-        placeholder="הוסף מייל…"
-        className="w-full min-w-[120px] bg-transparent px-0.5 py-0.5 text-[11px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
-        dir="ltr"
+        placeholder="הוסף כתובת מייל"
+        className="w-full min-w-[140px] bg-transparent px-0.5 py-0.5 text-start text-[11px] text-[var(--text-primary)] outline-none placeholder:text-start placeholder:text-[var(--text-muted)]"
+        dir="rtl"
         autoFocus
       />
       {suggestions.length > 0 ? (
@@ -660,7 +627,6 @@ export function Composer({
   }) => void;
 }) {
   const { state, dispatch } = useWorkspace();
-  const snapshot = getThreadSnapshot(threadId);
   const messages = getMessagesForThread(threadId);
   const lastMessage = [...messages].reverse().find(Boolean);
   const lastInbound =
@@ -673,6 +639,7 @@ export function Composer({
 
   const [focused, setFocused] = React.useState(false);
   const [formatOpen, setFormatOpen] = React.useState(false);
+  const [composerTall, setComposerTall] = React.useState(false);
   const [forwardSourceOpen, setForwardSourceOpen] = React.useState(false);
   const [attachments, setAttachments] = React.useState<ComposerAttachment[]>([]);
   const [to, setTo] = React.useState<Participant[]>([]);
@@ -683,12 +650,6 @@ export function Composer({
   const [draftStatus, setDraftStatus] = React.useState<"idle" | "saving" | "saved">(
     "idle",
   );
-  const [polishState, setPolishState] = React.useState<
-    "idle" | "working" | "done"
-  >("idle");
-  const [polishOriginal, setPolishOriginal] = React.useState<string | null>(null);
-  const [polishImproved, setPolishImproved] = React.useState<string | null>(null);
-  const [showingOriginal, setShowingOriginal] = React.useState(false);
   const [draftChipDismissed, setDraftChipDismissed] = React.useState(false);
   const [preferManualWrite, setPreferManualWrite] = React.useState(false);
 
@@ -796,6 +757,7 @@ export function Composer({
       if (!hasContent && !drafting) {
         setFocused(false);
         setAddingField(null);
+        setComposerTall(false);
       }
     };
     document.addEventListener("pointerdown", onPointerDown);
@@ -826,11 +788,6 @@ export function Composer({
   const onEditorInput = () => {
     const next = editorRef.current?.innerText ?? "";
     dispatch({ type: "SET_COMPOSER_TEXT", text: next });
-    if (polishState === "done") {
-      setPolishState("idle");
-      setPolishOriginal(null);
-      setShowingOriginal(false);
-    }
   };
 
   const onEditorPaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
@@ -877,11 +834,9 @@ export function Composer({
     onEditorInput();
   };
 
-  const addLink = () => {
-    const url = window.prompt("הזן קישור");
-    if (!url) return;
+  const applyTextColor = (color: string) => {
     editorRef.current?.focus();
-    document.execCommand("createLink", false, url);
+    document.execCommand("foreColor", false, color);
     onEditorInput();
   };
 
@@ -975,8 +930,6 @@ export function Composer({
     const previousAttachments = attachments;
     setEditorText("");
     setAttachments([]);
-    setPolishState("idle");
-    setPolishOriginal(null);
     dispatch({ type: "CLEAR_COMPOSER_DRAFT_CONTEXT" });
     toast("הטיוטה נמחקה", {
       action: {
@@ -989,29 +942,7 @@ export function Composer({
     });
     setFocused(false);
     setPreferManualWrite(false);
-  };
-
-  const runPolish = async (style: PolishStyle) => {
-    if (!text.trim()) {
-      // empty → draft reply
-      setFocused(true);
-      dispatch({
-        type: "SET_COMPOSER_FROM_ACTIONS",
-        text:
-          snapshot?.primary.draftReply ??
-          "שלום,\n\nתודה על העדכון. אחזור אליך עם אישור עד סוף היום.\n\nבברכה",
-        actionCount: draftActionCount || 1,
-      });
-      return;
-    }
-    setPolishState("working");
-    setPolishOriginal(text);
-    await sleep(700);
-    const improved = buildImprovedText(text, style);
-    setEditorText(improved);
-    setPolishImproved(improved);
-    setPolishState("done");
-    setShowingOriginal(false);
+    setComposerTall(false);
   };
 
   const send = () => {
@@ -1024,11 +955,11 @@ export function Composer({
     });
     setEditorText("");
     setAttachments([]);
-    setPolishState("idle");
-    setPolishOriginal(null);
     dispatch({ type: "CLEAR_COMPOSER_DRAFT_CONTEXT" });
     setFocused(false);
     setAddingField(null);
+    setComposerTall(false);
+    setFormatOpen(false);
   };
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -1039,13 +970,6 @@ export function Composer({
   };
 
   const summary = recipientSummary(to, cc);
-  const aiLabel =
-    polishState === "working"
-      ? "משפר ניסוח…"
-      : text.trim()
-        ? "שפר ניסוח"
-        : "נסח תשובה";
-
   const forwardSourceBody = lastInbound?.body ?? lastMessage?.body ?? "";
   const showNeedsYouEmpty =
     draftActionCount > 0 &&
@@ -1066,47 +990,76 @@ export function Composer({
       <div
         ref={rootRef}
         className={cn(
-          "overflow-hidden rounded-[16px] border bg-white transition-[min-height,box-shadow,border-color] duration-[160ms] ease-out",
+          "overflow-hidden rounded-[16px] border bg-white transition-[min-height,box-shadow,border-color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
           expanded
-            ? "min-h-[154px] border-[var(--border-strong)] shadow-[0_1px_0_rgba(33,37,41,0.04)]"
-            : "h-[58px] border-[var(--border)] hover:border-[var(--border-strong)]",
+            ? cn(
+                "border-[var(--border-strong)] shadow-[0_1px_0_rgba(33,37,41,0.04)]",
+                composerTall ? "min-h-[420px]" : "min-h-[193px]",
+              )
+            : "min-h-[58px] border-[var(--border)] hover:border-[var(--border-strong)]",
         )}
         onFocusCapture={() => setFocused(true)}
       >
-        {!expanded ? (
-          <button
-            type="button"
-            className="flex h-[58px] w-full items-center gap-3 px-3.5 text-start"
-            onClick={openComposer}
-          >
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5 text-[12px]">
-                {(() => {
-                  const ModeIcon = MODE_ICON[mode];
-                  return (
-                    <ModeIcon
-                      className="size-3.5 shrink-0 text-[var(--text-secondary)]"
-                      strokeWidth={1.75}
-                    />
-                  );
-                })()}
-                <span className="font-medium text-[var(--text-secondary)]">
-                  {MODE_LABEL[mode]}
-                </span>
+        <div
+          className={cn(
+            "grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+            expanded ? "grid-rows-[0fr]" : "grid-rows-[1fr]",
+          )}
+          aria-hidden={expanded}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <button
+              type="button"
+              tabIndex={expanded ? -1 : 0}
+              className="flex h-[58px] w-full items-center gap-3 px-3.5 text-start"
+              onClick={openComposer}
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 text-[12px]">
+                  {(() => {
+                    const ModeIcon = MODE_ICON[mode];
+                    return (
+                      <ModeIcon
+                        className="size-3.5 shrink-0 text-[var(--text-secondary)]"
+                        strokeWidth={1.75}
+                      />
+                    );
+                  })()}
+                  <span className="font-medium text-[var(--text-secondary)]">
+                    {MODE_LABEL[mode]}
+                  </span>
+                </div>
+                <p className="mt-0.5 truncate text-[13px] leading-snug text-[var(--text-muted)]">
+                  {summary}
+                </p>
               </div>
-              <p className="mt-0.5 truncate text-[13px] leading-snug text-[var(--text-muted)]">
-                {summary}
-              </p>
-            </div>
-            <span className="inline-flex size-8 items-center justify-center rounded-[8px] text-[var(--text-muted)]">
-              <Paperclip className="size-[17px]" strokeWidth={1.75} />
-            </span>
-            <span className="inline-flex size-8 items-center justify-center rounded-full text-[var(--text-muted)] opacity-45">
-              <Send className="size-[17px]" strokeWidth={1.75} />
-            </span>
-          </button>
-        ) : (
-          <div className="flex min-h-[154px] flex-col">
+              <span className="inline-flex size-8 items-center justify-center rounded-[8px] text-[var(--text-muted)]">
+                <Paperclip className="size-[17px]" strokeWidth={1.75} />
+              </span>
+              <span className="inline-flex size-8 items-center justify-center rounded-full text-[var(--text-muted)] opacity-45">
+                <Send className="size-[17px]" strokeWidth={1.75} />
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <div
+          className={cn(
+            "grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+            expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+          )}
+          aria-hidden={!expanded}
+        >
+          <div
+            className="min-h-0 overflow-hidden"
+            {...(!expanded ? { inert: true } : {})}
+          >
+          <div
+            className={cn(
+              "flex flex-col transition-[min-height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+              composerTall ? "min-h-[420px]" : "min-h-[193px]",
+            )}
+          >
             <div className="border-b border-[var(--border)] bg-[var(--surface-subtle)] px-3.5 py-2">
               <RecipientSummaryRows
                 to={to}
@@ -1191,6 +1144,7 @@ export function Composer({
                             setFocused(false);
                             setAddingField(null);
                             setFormatOpen(false);
+                            setComposerTall(false);
                             if (!hasContent) {
                               setPreferManualWrite(false);
                             }
@@ -1271,13 +1225,23 @@ export function Composer({
               </div>
             ) : null}
 
-            <div className="relative flex min-h-0 flex-1 flex-col px-3.5 pt-2">
+            <div className="relative flex min-h-0 flex-1 flex-col px-3.5 pt-2.5 pb-2">
               {drafting ? (
-                <div className="flex min-h-[86px] flex-1 items-center text-[15px] text-[var(--text-muted)]">
+                <div
+                  className={cn(
+                    "flex flex-1 items-center text-[15px] text-[var(--text-muted)] transition-[min-height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                    composerTall ? "min-h-[280px]" : "min-h-[108px]",
+                  )}
+                >
                   מנסח תשובה…
                 </div>
               ) : showNeedsYouEmpty ? (
-                <div className="flex min-h-[86px] flex-1 flex-col items-start justify-center gap-3 py-1">
+                <div
+                  className={cn(
+                    "flex flex-1 flex-col items-start justify-center gap-3 py-1 transition-[min-height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                    composerTall ? "min-h-[280px]" : "min-h-[108px]",
+                  )}
+                >
                   <p className="text-[14px] leading-snug text-[var(--text-secondary)]">
                     {draftActionCount === 1
                       ? "יש פעולה שדורשת ממך תשובה."
@@ -1286,22 +1250,12 @@ export function Composer({
                   <button
                     type="button"
                     onClick={() => {
-                      void runPolish("professional");
-                    }}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-[999px] bg-[var(--action-primary)] px-3.5 text-[13px] font-medium text-white hover:bg-[var(--action-primary-hover)]"
-                  >
-                    <Sparkles className="size-3.5" strokeWidth={1.75} />
-                    נסח תשובה
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
                       setPreferManualWrite(true);
                       window.setTimeout(() => editorRef.current?.focus(), 30);
                     }}
-                    className="text-[12.5px] text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                    className="inline-flex h-9 items-center rounded-[999px] bg-[var(--action-primary)] px-3.5 text-[13px] font-medium text-white hover:bg-[var(--action-primary-hover)]"
                   >
-                    או כתוב בעצמך…
+                    כתוב תשובה
                   </button>
                 </div>
               ) : (
@@ -1309,121 +1263,62 @@ export function Composer({
                   ref={editorRef}
                   role="textbox"
                   aria-multiline="true"
-                  aria-label="כתיבת תשובה"
+                  aria-label="כתבו את תוכן המייל כאן"
                   contentEditable
                   suppressContentEditableWarning
                   onInput={onEditorInput}
                   onPaste={onEditorPaste}
                   onKeyDown={onKeyDown}
-                  data-placeholder="כתיבת תשובה…"
+                  data-placeholder="כתבו את תוכן המייל כאן"
                   className={cn(
-                    "composer-editor bidi-content max-h-[168px] min-h-[86px] flex-1 overflow-y-auto text-[15px] leading-[1.65] outline-none",
+                    "composer-editor flex-1 overflow-y-auto text-start text-[15px] leading-[1.65] outline-none transition-[min-height,max-height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                    composerTall
+                      ? "max-h-[480px] min-h-[280px]"
+                      : "max-h-[210px] min-h-[108px]",
                   )}
-                  style={{ unicodeBidi: "plaintext" }}
-                  dir="auto"
+                  dir="rtl"
                 />
               )}
+
+              {attachments.length > 0 ? (
+                <ul className="mt-2 space-y-0.5">
+                  {attachments.map((file) => (
+                    <li
+                      key={file.id}
+                      className="flex h-8 items-center gap-2 text-[12px]"
+                    >
+                      <FileText
+                        className="size-3.5 shrink-0 text-[var(--text-secondary)]"
+                        strokeWidth={1.75}
+                      />
+                      <span className="min-w-0 flex-1 truncate text-[var(--text-primary)]">
+                        <bdi>{file.fileName}</bdi>
+                        <span className="text-[var(--text-muted)]">
+                          {" "}
+                          · {file.sizeLabel}
+                        </span>
+                      </span>
+                      {file.progress < 100 ? (
+                        <span className="shrink-0 text-[var(--text-muted)]">
+                          {file.progress}%
+                        </span>
+                      ) : null}
+                      <button
+                        type="button"
+                        aria-label="הסר קובץ"
+                        onClick={() => cancelAttachment(file.id)}
+                        className="inline-flex size-7 items-center justify-center rounded-[8px] text-[var(--text-muted)] hover:bg-[var(--surface-hover)]"
+                      >
+                        <X className="size-3.5" strokeWidth={1.75} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
 
-            {attachments.length > 0 ? (
-              <ul className="space-y-0.5 px-3.5 pt-1">
-                {attachments.map((file) => (
-                  <li
-                    key={file.id}
-                    className="flex h-8 items-center gap-2 text-[12px]"
-                  >
-                    <FileText
-                      className="size-3.5 shrink-0 text-[var(--text-secondary)]"
-                      strokeWidth={1.75}
-                    />
-                    <span className="min-w-0 flex-1 truncate text-[var(--text-primary)]">
-                      <bdi>{file.fileName}</bdi>
-                      <span className="text-[var(--text-muted)]">
-                        {" "}
-                        · {file.sizeLabel}
-                      </span>
-                    </span>
-                    {file.progress < 100 ? (
-                      <span className="shrink-0 text-[var(--text-muted)]">
-                        {file.progress}%
-                      </span>
-                    ) : null}
-                    <button
-                      type="button"
-                      aria-label="הסר קובץ"
-                      onClick={() => cancelAttachment(file.id)}
-                      className="inline-flex size-7 items-center justify-center rounded-[8px] text-[var(--text-muted)] hover:bg-[var(--surface-hover)]"
-                    >
-                      <X className="size-3.5" strokeWidth={1.75} />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-
-            {polishState === "done" ? (
-              <div className="flex flex-wrap items-center gap-2 px-3.5 pt-1.5 text-[12px] text-[var(--text-secondary)]">
-                <span>הניסוח שופר</span>
-                <button
-                  type="button"
-                  className="font-medium hover:text-[var(--text-primary)]"
-                  onClick={() => {
-                    if (!polishOriginal || !polishImproved) return;
-                    if (showingOriginal) {
-                      setShowingOriginal(false);
-                      setEditorText(polishImproved);
-                    } else {
-                      setShowingOriginal(true);
-                      setEditorText(polishOriginal);
-                    }
-                  }}
-                >
-                  {showingOriginal ? "הצג משופר" : "הצג מקור"}
-                </button>
-                <button
-                  type="button"
-                  className="font-medium hover:text-[var(--text-primary)]"
-                  onClick={() => {
-                    if (polishOriginal) setEditorText(polishOriginal);
-                    setPolishState("idle");
-                    setPolishOriginal(null);
-                    setPolishImproved(null);
-                    setShowingOriginal(false);
-                  }}
-                >
-                  ביטול
-                </button>
-              </div>
-            ) : null}
-
-            {formatOpen ? (
-              <div className="mx-3.5 mt-1.5 flex items-center gap-0.5 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-1">
-                <ToolIconButton label="מודגש" onClick={() => applyFormat("bold")}>
-                  <Bold className="size-[17px]" strokeWidth={1.75} />
-                </ToolIconButton>
-                <ToolIconButton label="נטוי" onClick={() => applyFormat("italic")}>
-                  <Italic className="size-[17px]" strokeWidth={1.75} />
-                </ToolIconButton>
-                <ToolIconButton
-                  label="קו תחתון"
-                  onClick={() => applyFormat("underline")}
-                >
-                  <Underline className="size-[17px]" strokeWidth={1.75} />
-                </ToolIconButton>
-                <ToolIconButton
-                  label="רשימה"
-                  onClick={() => applyFormat("insertUnorderedList")}
-                >
-                  <List className="size-[17px]" strokeWidth={1.75} />
-                </ToolIconButton>
-                <ToolIconButton label="קישור" onClick={addLink}>
-                  <Link2 className="size-[17px]" strokeWidth={1.75} />
-                </ToolIconButton>
-              </div>
-            ) : null}
-
-            <div className="mt-auto flex items-center justify-between gap-2 border-t border-transparent px-2.5 pt-1.5 pb-2">
-              <div className="flex items-center gap-0.5">
+            <div className="flex items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--surface-subtle)] px-3 py-2">
+              <div className="flex items-center gap-1">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -1441,55 +1336,113 @@ export function Composer({
                 >
                   <Paperclip className="size-[17px]" strokeWidth={1.75} />
                 </ToolIconButton>
-                <ToolIconButton
-                  label="עיצוב טקסט"
-                  onClick={() => setFormatOpen((v) => !v)}
-                >
-                  <TextCursorInput className="size-[17px]" strokeWidth={1.75} />
-                </ToolIconButton>
 
-                {!showNeedsYouEmpty ? (
-                  text.trim() ? (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button
-                          type="button"
-                          disabled={polishState === "working" || drafting}
-                          className="inline-flex h-8 items-center gap-1.5 rounded-[8px] px-2 text-[12.5px] text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-40"
-                        >
-                          <Sparkles className="size-[17px]" strokeWidth={1.75} />
-                          {aiLabel}
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start">
-                        {(Object.keys(POLISH_LABEL) as PolishStyle[]).map(
-                          (key) => (
-                            <DropdownMenuItem
-                              key={key}
-                              onSelect={() => {
-                                void runPolish(key);
-                              }}
-                            >
-                              {POLISH_LABEL[key]}
-                            </DropdownMenuItem>
-                          ),
+                <div
+                  className={cn(
+                    "flex items-center overflow-hidden transition-[background-color,box-shadow] duration-150",
+                    formatOpen
+                      ? "rounded-full bg-white pe-1.5 ps-1 ring-1 ring-[var(--border)]"
+                      : "rounded-[8px]",
+                  )}
+                >
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="עיצוב טקסט"
+                        aria-pressed={formatOpen}
+                        onClick={() => setFormatOpen((v) => !v)}
+                        className={cn(
+                          "inline-flex size-8 shrink-0 items-center justify-center transition-colors",
+                          formatOpen
+                            ? "rounded-full bg-[var(--action-primary)] text-white"
+                            : "rounded-[8px] text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]",
                         )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={polishState === "working" || drafting}
-                      onClick={() => {
-                        void runPolish("professional");
-                      }}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-[8px] px-2 text-[12.5px] text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-40"
-                    >
-                      <Sparkles className="size-[17px]" strokeWidth={1.75} />
-                      {aiLabel}
-                    </button>
-                  )
-                ) : null}
+                      >
+                        <TextCursorInput
+                          className="size-[17px]"
+                          strokeWidth={1.75}
+                        />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">עיצוב טקסט</TooltipContent>
+                  </Tooltip>
+
+                  <div
+                    className={cn(
+                      "grid transition-[grid-template-columns] duration-200 ease-out",
+                      formatOpen ? "grid-cols-[1fr]" : "grid-cols-[0fr]",
+                    )}
+                  >
+                    <div className="flex min-w-0 items-center gap-0.5 overflow-hidden">
+                      <button
+                        type="button"
+                        aria-label="מודגש"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => applyFormat("bold")}
+                        className="inline-flex size-7 items-center justify-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+                      >
+                        <Bold className="size-3.5" strokeWidth={1.75} />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="נטוי"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => applyFormat("italic")}
+                        className="inline-flex size-7 items-center justify-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+                      >
+                        <Italic className="size-3.5" strokeWidth={1.75} />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="קו תחתון"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => applyFormat("underline")}
+                        className="inline-flex size-7 items-center justify-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+                      >
+                        <Underline className="size-3.5" strokeWidth={1.75} />
+                      </button>
+                      <span
+                        className="mx-0.5 h-3.5 w-px shrink-0 bg-[var(--border)]"
+                        aria-hidden
+                      />
+                      {TEXT_COLORS.map((color) => (
+                        <button
+                          key={color.id}
+                          type="button"
+                          aria-label={color.label}
+                          title={color.label}
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => applyTextColor(color.value)}
+                          className="inline-flex size-7 items-center justify-center rounded-full hover:bg-[var(--surface-hover)]"
+                        >
+                          <span
+                            className={cn(
+                              "size-3.5 rounded-full ring-1",
+                              color.id === "black"
+                                ? "ring-[var(--border-strong)]"
+                                : "ring-[var(--border)]",
+                            )}
+                            style={{ backgroundColor: color.value }}
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <ToolIconButton
+                  label={composerTall ? "הקטן אזור כתיבה" : "הגדל אזור כתיבה"}
+                  onClick={() => setComposerTall((v) => !v)}
+                >
+                  <UnfoldVertical
+                    className={cn(
+                      "size-[17px] transition-transform duration-200",
+                      composerTall && "rotate-180",
+                    )}
+                    strokeWidth={1.75}
+                  />
+                </ToolIconButton>
 
                 {hasContent ? (
                   <ToolIconButton label="מחק טיוטה" onClick={clearDraft}>
@@ -1506,7 +1459,7 @@ export function Composer({
                   "inline-flex h-9 items-center gap-2 rounded-[999px] px-4 text-[13px] font-medium transition-colors",
                   hasContent && !drafting
                     ? "bg-[var(--action-primary)] text-white hover:bg-[var(--action-primary-hover)]"
-                    : "bg-[var(--surface-selected)] text-[var(--text-muted)]",
+                    : "bg-white text-[var(--text-muted)] ring-1 ring-[var(--border)]",
                 )}
               >
                 <Send className="size-[17px]" strokeWidth={1.75} />
@@ -1514,7 +1467,8 @@ export function Composer({
               </button>
             </div>
           </div>
-        )}
+          </div>
+        </div>
       </div>
     </div>
   );
