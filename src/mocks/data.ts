@@ -7,12 +7,100 @@ import type {
   Project,
   QueueId,
   SearchResult,
+  SignatureSnapshot,
   SuggestedAction,
   Task,
   Thread,
 } from "@/types/domain";
 
 export const CURRENT_USER_ID = "user-me";
+
+/** A — full signature snapshot */
+export const signatureSnapshotFull: SignatureSnapshot = {
+  sentAt: "2026-08-09T11:15:00.000Z",
+  name: "עמית רוזן",
+  title: "מנהלת תפעול",
+  company: "CityHub Operations",
+  descriptionBlocks: [
+    "אחראית על תיאום התקנות ולוחות זמנים מול צוותי השטח.",
+  ],
+  phoneNumbers: ["050-123-4567", "03-555-0190"],
+  emailAddresses: ["amit@cityhub.io"],
+  links: [
+    {
+      id: "sig-link-site",
+      url: "https://www.cityhub.io",
+      anchorText: "CityHub",
+    },
+    {
+      id: "sig-link-ops",
+      url: "https://ops.cityhub.io/access",
+      anchorText: "טופס גישה לאתר",
+    },
+  ],
+  images: [
+    {
+      id: "sig-img-1",
+      src: "/mock-mail/amit-profile.jpg",
+      alt: "תמונה מהחתימה",
+      width: 120,
+      height: 120,
+    },
+    {
+      id: "sig-img-2",
+      src: "/mock-mail/cityhub-logo.svg",
+      alt: "תמונה מהחתימה",
+      width: 64,
+      height: 64,
+    },
+    {
+      id: "sig-img-pixel",
+      src: "/mock-mail/entrance.jpg",
+      width: 1,
+      height: 1,
+      isTrackingPixel: true,
+    },
+  ],
+};
+
+/** B — minimal signature snapshot */
+export const signatureSnapshotMinimal: SignatureSnapshot = {
+  sentAt: "2026-08-07T09:10:00.000Z",
+  name: "עמית רוזן",
+  phoneNumbers: ["050-123-4567"],
+  emailAddresses: ["amit@cityhub.io"],
+};
+
+/** C — unstructured signature snapshot */
+export const signatureSnapshotUnstructured: SignatureSnapshot = {
+  sentAt: "2026-08-08T11:20:00.000Z",
+  descriptionBlocks: [
+    "נשמח לעדכון לאחר שתעברו על התוכנית.",
+    "בברכה, צוות CityHub",
+  ],
+  links: [
+    {
+      id: "sig-link-unknown",
+      url: "https://bit.ly/cityhub-plan-v3",
+    },
+  ],
+  images: [
+    {
+      id: "sig-img-u1",
+      src: "/mock-mail/opening-detail.jpg",
+      alt: "תמונה מהחתימה",
+      width: 240,
+      height: 160,
+    },
+    {
+      id: "sig-img-spacer",
+      src: "/mock-mail/entrance.jpg",
+      width: 2,
+      height: 2,
+      isSpacer: true,
+    },
+  ],
+};
 
 export const participants: Participant[] = [
   {
@@ -61,7 +149,7 @@ export const participants: Participant[] = [
     email: "amit@cityhub.io",
     company: "CityHub",
     initials: "ער",
-    avatarUrl: "https://i.pravatar.cc/144?u=amit@cityhub.io",
+    avatarUrl: "/mock-mail/amit-profile.jpg",
   },
   {
     id: "p-lisa",
@@ -263,6 +351,44 @@ export const attachments: Attachment[] = [
     messageId: "msg-city-3",
   },
   {
+    id: "att-city-scope",
+    fileName: "scope-of-work.docx",
+    mimeType:
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    sizeLabel: "340 ק״ב",
+    messageId: "msg-city-3",
+  },
+  {
+    id: "att-city-pack",
+    fileName: "site-photos.zip",
+    mimeType: "application/zip",
+    sizeLabel: "8.2 מ״ב",
+    messageId: "msg-city-3",
+  },
+  {
+    id: "att-city-budget",
+    fileName: "budget-estimate.xlsx",
+    mimeType:
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    sizeLabel: "124 ק״ב",
+    messageId: "msg-city-3",
+  },
+  {
+    id: "att-city-notes",
+    fileName: "site-visit-notes.docx",
+    mimeType:
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    sizeLabel: "96 ק״ב",
+    messageId: "msg-city-3",
+  },
+  {
+    id: "att-city-facade",
+    fileName: "facade-ref.jpg",
+    mimeType: "image/jpeg",
+    sizeLabel: "2.1 מ״ב",
+    messageId: "msg-city-3",
+  },
+  {
     id: "att-city-access",
     fileName: "site-access-form.pdf",
     mimeType: "application/pdf",
@@ -345,6 +471,7 @@ export const messages: Message[] = [
     body: "תודה. נוסף מועד יעד: 14 באוגוסט.\nנדרשת תשובה ממך על האם ניתן לעמוד בלוח הזמנים עם הכמות החדשה.",
     isOutbound: false,
     quotedText: "נבדוק זמינות ספקים ונחזור עם הצעה עד מחר.",
+    repliedToMessageId: "msg-qty-2",
   },
   {
     id: "msg-wait-1",
@@ -393,8 +520,8 @@ export const messages: Message[] = [
     sentAt: "2026-08-07T09:10:00.000Z",
     body: "מאור שלום,\n\nאנחנו מעדכנים את היקף ההתקנה ב־CityHub.\nהכמות עודכנה מ־40 ל־65 יחידות, ולכן נדרש תיאום מחדש של לוח הזמנים מול צוות השטח.",
     isOutbound: false,
-    signature: "עמית רוזן\nCityHub Operations",
     attachmentIds: ["att-city-photo"],
+    signatureSnapshot: signatureSnapshotMinimal,
   },
   {
     id: "msg-city-2",
@@ -411,10 +538,19 @@ export const messages: Message[] = [
     fromId: "p-amit",
     toIds: ["user-me"],
     sentAt: "2026-08-08T11:20:00.000Z",
-    body: "מצורפת תוכנית האתר המעודכנת.\nחשוב שתעברו עליה לפני אישור המועד.",
+    body: "מצורפים תוכנית האתר, מסמך היקף העבודה וחבילת תמונות מהאתר.\nחשוב שתעברו עליהם לפני אישור המועד.",
     isOutbound: false,
     quotedText: "נקבל את הכמות החדשה ונבדוק זמינות צוות להתקנה בשבוע הבא.",
-    attachmentIds: ["att-site-plan"],
+    repliedToMessageId: "msg-city-2",
+    attachmentIds: [
+      "att-site-plan",
+      "att-city-scope",
+      "att-city-pack",
+      "att-city-budget",
+      "att-city-notes",
+      "att-city-facade",
+    ],
+    signatureSnapshot: signatureSnapshotUnstructured,
   },
   {
     id: "msg-city-4",
@@ -436,6 +572,7 @@ export const messages: Message[] = [
     body: "נוסף מועד יעד: 18 באוגוסט.\nההתקנה תתבצע בשני שלבים.\nנדרש אישור שלך למועד + איש קשר באתר.",
     isOutbound: false,
     quotedText: "אעבור עם צוות השטח ואחזור עם אישור עקרוני.",
+    repliedToMessageId: "msg-city-4",
     attachmentIds: ["att-city-access"],
   },
   {
@@ -447,7 +584,9 @@ export const messages: Message[] = [
     body: "מצורפת תמונה של אזור הכניסה. כאן צריך להרחיב את הפתח ב־20 ס״מ. בתמונה הזו ניתן לראות את החיבור הקיים.",
     isOutbound: false,
     quotedText: "קיבלתי את הקובץ. אעבור עם צוות השטח ואחזור עם אישור עקרוני.",
+    repliedToMessageId: "msg-city-4",
     attachmentIds: ["att-city-updated-plan"],
+    signatureSnapshot: signatureSnapshotFull,
     content: [
       {
         type: "paragraph",
@@ -664,6 +803,7 @@ export const messages: Message[] = [
     body: "קיבלתי. אעבור על המסמך ואחזור עם הערות ממוקדות.",
     isOutbound: true,
     quotedText: "אפשר לאשר את לוח הזמנים עד יום ראשון?",
+    repliedToMessageId: "msg-mixed-2",
   },
   {
     id: "msg-short-1",

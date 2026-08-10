@@ -76,6 +76,27 @@ export function getMessagesForThread(threadId: string) {
     .sort((a, b) => a.sentAt.localeCompare(b.sentAt));
 }
 
+export function getMessageById(id: string) {
+  return messages.find((m) => m.id === id);
+}
+
+/** Full source message the sender replied to, when known. */
+export function resolveRepliedToMessage(message: Message): Message | null {
+  if (message.repliedToMessageId) {
+    return getMessageById(message.repliedToMessageId) ?? null;
+  }
+
+  const hasQuote =
+    Boolean(message.quotedText) ||
+    Boolean(message.content?.some((b) => b.type === "quoted-text"));
+  if (!hasQuote) return null;
+
+  const threadMessages = getMessagesForThread(message.threadId);
+  const index = threadMessages.findIndex((m) => m.id === message.id);
+  if (index <= 0) return null;
+  return threadMessages[index - 1] ?? null;
+}
+
 function isExcludedInlineImage(block: MessageInlineImageBlock) {
   if (block.isTrackingPixel || block.isSpacer || block.isSignatureLogo) return true;
   if (block.width === 1 && block.height === 1) return true;

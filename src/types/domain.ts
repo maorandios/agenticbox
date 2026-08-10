@@ -89,6 +89,40 @@ export type MessageContentBlock =
   | MessageInlineImageBlock
   | MessageAttachmentBlock;
 
+/** Per-message signature snapshot — only values found in that message's signature */
+export type SignatureSnapshotLink = {
+  id: string;
+  url: string;
+  /** Original anchor text if present */
+  anchorText?: string;
+};
+
+export type SignatureSnapshotImage = {
+  id: string;
+  src: string;
+  alt?: string;
+  width?: number;
+  height?: number;
+  isTrackingPixel?: boolean;
+  isSpacer?: boolean;
+  /** Tiny duplicate social/icon spam */
+  isTinyDuplicateIcon?: boolean;
+};
+
+export type SignatureSnapshot = {
+  sentAt: string;
+  /** Explicit identity values only if present in this signature */
+  name?: string;
+  title?: string;
+  company?: string;
+  /** Free-text paragraphs from the signature, original order */
+  descriptionBlocks?: string[];
+  phoneNumbers?: string[];
+  emailAddresses?: string[];
+  links?: SignatureSnapshotLink[];
+  images?: SignatureSnapshotImage[];
+};
+
 export type Message = {
   id: string;
   threadId: string;
@@ -102,8 +136,13 @@ export type Message = {
   /** Structured body blocks; when present, rendered instead of plain `body` */
   content?: MessageContentBlock[];
   isOutbound: boolean;
+  /** Message id this message is a reply to (full source mail for “כתגובה למייל זה”) */
+  repliedToMessageId?: string;
   quotedText?: string;
+  /** Legacy plain-text signature — hidden when signatureSnapshot exists */
   signature?: string;
+  /** Historical signature as found on this specific message */
+  signatureSnapshot?: SignatureSnapshot;
   attachmentIds?: string[];
 };
 

@@ -5,11 +5,9 @@ import {
   Bold,
   ChevronDown,
   ChevronUp,
-  Clock3,
   Copy,
   Download,
   Eye,
-  FileImage,
   Forward,
   Paperclip,
   Reply,
@@ -20,7 +18,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/cn";
-import { formatMessageDateTime, formatThreadTime } from "@/lib/format";
+import { getAttachmentTypeLabel } from "@/lib/attachment-kind";
+import {
+  formatCompactMessageStamp,
+  formatMessageDateTimeLong,
+  formatQuotedMessageStamp,
+} from "@/lib/format";
 import { getDisplayInitials } from "@/lib/initials";
 import {
   CURRENT_USER_ID,
@@ -29,8 +32,14 @@ import {
   getParticipant,
   getThread,
   getThreadSnapshot,
+  resolveRepliedToMessage,
 } from "@/mocks";
+import { AttachmentTypeIcon } from "@/components/conversation/AttachmentTypeIcon";
 import { MessageBody } from "@/components/conversation/MessageBody";
+import {
+  SignatureSnapshotAffordance,
+  SignatureSnapshotCard,
+} from "@/components/conversation/SignatureContactCard";
 import { ThreadHeader } from "@/components/conversation/ThreadHeader";
 import { IconButton } from "@/components/shared/IconButton";
 import {
@@ -46,7 +55,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useWorkspace } from "@/state/workspace";
-import type { Attachment, Message, Participant } from "@/types/domain";
+import type {
+  Attachment,
+  Message,
+  MessageParagraphBlock,
+  Participant,
+} from "@/types/domain";
 
 async function copyText(value: string, success: string) {
   try {
@@ -55,14 +69,6 @@ async function copyText(value: string, success: string) {
   } catch {
     toast.error("לא ניתן להעתיק");
   }
-}
-
-function attachmentTypeLabel(file: Attachment): string {
-  const ext = file.fileName.split(".").pop();
-  if (ext && ext !== file.fileName) return ext.toUpperCase();
-  if (file.mimeType.startsWith("image/")) return "IMG";
-  if (file.mimeType === "application/pdf") return "PDF";
-  return "FILE";
 }
 
 function PersonAvatar({ person }: { person?: Participant | null }) {
@@ -82,10 +88,18 @@ function PersonAvatar({ person }: { person?: Participant | null }) {
   }
 
   return (
-    <div className="flex size-9 shrink-0 self-start items-center justify-center rounded-full bg-[#ECECE8] text-[12px] font-semibold text-[#363633] ring-1 ring-[#E7E7E1]">
+    <div className="flex size-9 shrink-0 self-start items-center justify-center rounded-full bg-[var(--surface-selected)] text-[12px] font-semibold text-[var(--text-primary)] ring-1 ring-[var(--border)]">
       {initials}
     </div>
   );
+}
+
+function plainMessageBody(message: Message): string {
+  if (!message.content?.length) return message.body;
+  const paragraphs = message.content
+    .filter((block): block is MessageParagraphBlock => block.type === "paragraph")
+    .map((block) => block.text);
+  return paragraphs.length > 0 ? paragraphs.join("\n\n") : message.body;
 }
 
 function QuotedBlock({
@@ -97,13 +111,13 @@ function QuotedBlock({
 }) {
   const [open, setOpen] = React.useState(false);
   return (
-    <div className="mt-3" dir="rtl">
+    <div className="mt-0" dir="rtl">
       <div className="flex justify-start">
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
           className={cn(
-            "inline-flex items-center gap-1 text-[12px] transition-colors duration-[130ms]",
+            "inline-flex h-8 items-center gap-1 text-[12px] transition-colors duration-[130ms]",
             dark
               ? "text-white/65 hover:text-white"
               : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]",
@@ -114,7 +128,7 @@ function QuotedBlock({
           ) : (
             <ChevronDown className="size-[14px]" strokeWidth={1.75} />
           )}
-          {open ? "הסתר טקסט מצוטט" : "הצג טקסט מצוטט"}
+          {open ? "הסתר חתימה" : "הצג חתימה"}
         </button>
       </div>
       <div
@@ -129,11 +143,101 @@ function QuotedBlock({
               "mt-2 border-r-2 pr-3 text-start text-[13px] leading-6 whitespace-pre-wrap",
               dark
                 ? "border-white/25 text-white/65"
-                : "border-[#E7E7E1] text-[var(--text-secondary)]",
+                : "border-[var(--border)] text-[var(--text-secondary)]",
             )}
             dir="rtl"
           >
             {text}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReplyToBlock({
+  source,
+  dark,
+}: {
+  source: Message;
+  dark: boolean;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const sourceSender = getParticipant(source.fromId);
+  const sourceBody = plainMessageBody(source);
+  const stamp = formatQuotedMessageStamp(source.sentAt);
+  const summaryLabel = sourceSender
+    ? `תגובה ל${sourceSender.name} · ${stamp}`
+    : `תגובה להודעה · ${stamp}`;
+
+  const controlClass = cn(
+    "inline-flex h-8 max-w-full items-center gap-1.5 text-[12px] transition-colors duration-[130ms]",
+    dark
+      ? "text-white/65 hover:text-white"
+      : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]",
+  );
+
+  return (
+    <div dir="rtl">
+      <div
+        className={cn(
+          "grid transition-[grid-template-rows] duration-[180ms] ease-out",
+          open ? "grid-rows-[0fr]" : "grid-rows-[1fr]",
+        )}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <div className="flex justify-start">
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              aria-expanded={false}
+              tabIndex={open ? -1 : 0}
+              className={controlClass}
+            >
+              <Reply className="size-[14px] shrink-0" strokeWidth={1.75} />
+              <span className="truncate">{summaryLabel}</span>
+              <ChevronDown className="size-[14px] shrink-0" strokeWidth={1.75} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        className={cn(
+          "grid transition-[grid-template-rows] duration-[180ms] ease-out",
+          open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+        )}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <div className="space-y-2">
+            <div
+              className={cn(
+                "border-r-2 pr-3 text-start",
+                dark ? "border-white/20" : "border-[var(--border)]",
+              )}
+            >
+              <div
+                className={cn(
+                  "bidi-content whitespace-pre-wrap text-[13px] leading-6",
+                  dark ? "text-white/70" : "text-[var(--text-secondary)]",
+                )}
+                dir="auto"
+              >
+                {sourceBody}
+              </div>
+            </div>
+            <div className="flex justify-start">
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                aria-expanded={true}
+                tabIndex={open ? 0 : -1}
+                className={controlClass}
+              >
+                <ChevronUp className="size-[14px] shrink-0" strokeWidth={1.75} />
+                <span>הסתר תגובה</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -148,16 +252,14 @@ function AttachmentRow({
   file: Attachment;
   dark: boolean;
 }) {
-  const typeLabel = attachmentTypeLabel(file);
+  const typeLabel = getAttachmentTypeLabel(file);
   const openPreview = () => toast("תצוגה מקדימה מדומה");
-  const metaClass = dark ? "text-white/65" : "text-[var(--text-muted)]";
+  const metaClass = dark ? "text-white/55" : "text-[var(--text-muted)]";
+  const iconClass = dark ? "text-white/80" : "text-[var(--text-primary)]";
 
   return (
     <div
-      className={cn(
-        "flex min-h-[48px] items-center gap-2 rounded-[12px] px-3 py-2.5",
-        dark ? "bg-white/8" : "bg-[#ECECE8]",
-      )}
+      className="flex h-[38px] items-center gap-2 px-0.5"
       dir="rtl"
     >
       <button
@@ -165,19 +267,13 @@ function AttachmentRow({
         onClick={openPreview}
         className="flex min-w-0 flex-1 items-center gap-2 text-start"
       >
-        <FileImage
-          className={cn(
-            "size-4 shrink-0",
-            dark ? "text-white/80" : "text-[#363633]",
-          )}
-          strokeWidth={1.75}
-        />
+        <AttachmentTypeIcon file={file} className={iconClass} />
         <Tooltip>
           <TooltipTrigger asChild>
             <span
               className={cn(
-                "min-w-0 truncate text-[12px] font-semibold",
-                dark ? "text-white" : "text-[#363633]",
+                "min-w-0 truncate text-[12px] font-medium",
+                dark ? "text-white" : "text-[var(--text-primary)]",
               )}
             >
               <bdi>{file.fileName}</bdi>
@@ -190,11 +286,11 @@ function AttachmentRow({
         <span className={cn("shrink-0 text-[12px]", metaClass)} aria-hidden>
           ·
         </span>
-        <bdi className={cn("shrink-0 text-[12px]", metaClass)}>{file.sizeLabel}</bdi>
+        <bdi className={cn("shrink-0 text-[12px]", metaClass)}>{typeLabel}</bdi>
         <span className={cn("shrink-0 text-[12px]", metaClass)} aria-hidden>
           ·
         </span>
-        <bdi className={cn("shrink-0 text-[12px]", metaClass)}>{typeLabel}</bdi>
+        <bdi className={cn("shrink-0 text-[12px]", metaClass)}>{file.sizeLabel}</bdi>
       </button>
 
       <div className="flex shrink-0 items-center gap-0.5">
@@ -240,6 +336,114 @@ function AttachmentRow({
           </TooltipTrigger>
           <TooltipContent>הורדה</TooltipContent>
         </Tooltip>
+      </div>
+    </div>
+  );
+}
+
+function attachmentTypesSummary(files: Attachment[]): string {
+  const labels = files.map((file) => getAttachmentTypeLabel(file));
+  if (labels.length <= 3) return labels.join(", ");
+  return `${labels.slice(0, 3).join(", ")} ועוד ${labels.length - 3}`;
+}
+
+function AttachmentStack({
+  files,
+  dark,
+}: {
+  files: Attachment[];
+  dark: boolean;
+}) {
+  const [expanded, setExpanded] = React.useState(false);
+
+  if (files.length === 0) return null;
+
+  const useSummary = files.length >= 3;
+  const muted = dark ? "text-white/65" : "text-[var(--text-muted)]";
+  const primary = dark ? "text-white" : "text-[var(--text-primary)]";
+
+  const fileList = (
+    <ul
+      className={cn(
+        "flex flex-col divide-y",
+        dark ? "divide-white/10" : "divide-[var(--border)]",
+        useSummary && "thin-scroll max-h-[180px] overflow-y-auto",
+      )}
+    >
+      {files.map((file) => (
+        <li key={file.id}>
+          <AttachmentRow file={file} dark={dark} />
+        </li>
+      ))}
+    </ul>
+  );
+
+  if (!useSummary) {
+    return <div dir="rtl">{fileList}</div>;
+  }
+
+  return (
+    <div dir="rtl">
+      <div
+        className={cn(
+          "grid transition-[grid-template-rows] duration-[180ms] ease-out",
+          expanded ? "grid-rows-[0fr]" : "grid-rows-[1fr]",
+        )}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            aria-expanded={false}
+            tabIndex={expanded ? -1 : 0}
+            className={cn(
+              "flex h-10 w-full items-center gap-2 text-start transition-opacity hover:opacity-90",
+              muted,
+            )}
+          >
+            <Paperclip
+              className={cn("size-3.5 shrink-0", primary)}
+              strokeWidth={1.75}
+            />
+            <span className={cn("shrink-0 text-[12.5px] font-medium", primary)}>
+              {`${files.length} קבצים מצורפים`}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-[12px]">
+              {attachmentTypesSummary(files)}
+            </span>
+            <ChevronDown className="size-3.5 shrink-0" strokeWidth={1.75} />
+          </button>
+        </div>
+      </div>
+
+      <div
+        className={cn(
+          "grid transition-[grid-template-rows] duration-[180ms] ease-out",
+          expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+        )}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <div className="space-y-1">
+            {fileList}
+            <div className="flex justify-start pt-0.5">
+              <button
+                type="button"
+                onClick={() => setExpanded(false)}
+                aria-expanded={true}
+                tabIndex={expanded ? 0 : -1}
+                className={cn(
+                  "inline-flex h-8 items-center gap-1.5 text-[12px] transition-colors",
+                  dark
+                    ? "text-white/65 hover:text-white"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]",
+                )}
+              >
+                <ChevronUp className="size-3.5" strokeWidth={1.75} />
+                הסתר קבצים
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -308,7 +512,7 @@ function MessageToolbar({ message }: { message: Message }) {
               aria-label={item.label}
               onClick={item.onClick}
               className={cn(
-                "inline-flex size-7 items-center justify-center rounded-[8px] text-[var(--text-secondary)] opacity-80 transition-all duration-[120ms] ease-out hover:bg-[#F2F2EE] hover:opacity-100",
+                "inline-flex size-7 items-center justify-center rounded-[8px] text-[var(--text-secondary)] opacity-80 transition-all duration-[120ms] ease-out hover:bg-[var(--surface-hover)] hover:opacity-100",
                 item.destructive
                   ? "hover:text-red-600"
                   : "hover:text-[var(--text-primary)]",
@@ -332,7 +536,9 @@ function MessageBubble({
   highlighted: boolean;
 }) {
   const [detailsOpen, setDetailsOpen] = React.useState(false);
+  const [signatureOpen, setSignatureOpen] = React.useState(false);
   const sender = getParticipant(message.fromId);
+  const signature = message.signatureSnapshot;
   const toPeople = message.toIds
     .map((id) => getParticipant(id))
     .filter((p): p is Participant => Boolean(p));
@@ -341,10 +547,13 @@ function MessageBubble({
     .filter((p): p is Participant => Boolean(p));
   const replyTo = message.replyToId ? getParticipant(message.replyToId) : null;
   const attachments = getBubbleAttachments(message);
-  const hasContentAttachments = message.content?.some((b) => b.type === "attachment");
+  const repliedTo = resolveRepliedToMessage(message);
   const mine = message.isOutbound;
   const dark = !mine;
-  const fullDate = formatMessageDateTime(message.sentAt);
+  const compactStamp = formatCompactMessageStamp(message.sentAt);
+  const fullStamp = formatMessageDateTimeLong(message.sentAt);
+
+  const avatarNode = <PersonAvatar person={sender} />;
 
   return (
     <article
@@ -358,27 +567,48 @@ function MessageBubble({
           mine ? "flex-row-reverse" : "flex-row",
         )}
       >
-        <PersonAvatar person={sender} />
+        {signature ? (
+          <SignatureSnapshotCard
+            snapshot={signature}
+            open={signatureOpen}
+            onOpenChange={setSignatureOpen}
+            anchor={
+              <button
+                type="button"
+                aria-label="הצג את חתימת השולח"
+                className="shrink-0 self-start rounded-full transition-opacity hover:opacity-90"
+              >
+                {avatarNode}
+              </button>
+            }
+          />
+        ) : (
+          avatarNode
+        )}
 
         <div className="min-w-0">
           <div
             className={cn(
               "relative w-fit max-w-full rounded-[16px] px-[18px] py-4 transition-[box-shadow] duration-[140ms]",
               mine
-                ? "border border-[#E7E7E1] bg-[#F6F6F3] text-[#363633]"
-                : "bg-[#3F4548] text-[#FCFCF8]",
-              highlighted && "ring-2 ring-[#A8A8A1] ring-offset-2",
+                ? "border border-[var(--border)] bg-[var(--surface-outgoing)] text-[var(--text-primary)]"
+                : "bg-[var(--surface-incoming)] text-white",
+              highlighted && "ring-2 ring-[var(--border-strong)] ring-offset-2",
             )}
           >
-            <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1" dir="rtl">
+            <div
+              className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1"
+              dir="rtl"
+            >
               <span
                 className={cn(
                   "text-[13.5px] font-semibold",
-                  dark ? "text-[#FCFCF8]" : "text-[#363633]",
+                  dark ? "text-white" : "text-[var(--text-primary)]",
                 )}
               >
                 <bdi>{sender?.name ?? "לא ידוע"}</bdi>
               </span>
+
               {sender?.email ? (
                 <span
                   className={cn(
@@ -393,7 +623,7 @@ function MessageBubble({
                     aria-label="העתק כתובת מייל"
                     onClick={() => copyText(sender.email, "כתובת המייל הועתקה")}
                     className={cn(
-                      "inline-flex size-5 items-center justify-center rounded-[4px] opacity-70 transition-opacity hover:opacity-100",
+                      "inline-flex size-5 items-center justify-center rounded-[4px] opacity-0 transition-opacity group-hover/mail:opacity-100 focus-visible:opacity-100",
                       dark ? "hover:bg-white/10" : "hover:bg-black/5",
                     )}
                   >
@@ -401,20 +631,30 @@ function MessageBubble({
                   </button>
                 </span>
               ) : null}
+
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span
+                  <time
+                    dateTime={message.sentAt}
                     className={cn(
-                      "inline-flex items-center gap-1 text-[11.5px]",
+                      "text-[11.5px]",
                       dark ? "text-white/65" : "text-[var(--text-muted)]",
                     )}
                   >
-                    <Clock3 className="size-3" strokeWidth={1.75} />
-                    <time dateTime={message.sentAt}>{fullDate}</time>
-                  </span>
+                    {compactStamp}
+                  </time>
                 </TooltipTrigger>
-                <TooltipContent>{formatThreadTime(message.sentAt)}</TooltipContent>
+                <TooltipContent>{fullStamp}</TooltipContent>
               </Tooltip>
+
+              {signature ? (
+                <SignatureSnapshotAffordance
+                  dark={dark}
+                  open={signatureOpen}
+                  onOpenChange={setSignatureOpen}
+                />
+              ) : null}
+
               <button
                 type="button"
                 aria-expanded={detailsOpen}
@@ -446,10 +686,8 @@ function MessageBubble({
               <div className="min-h-0 overflow-hidden">
                 <div
                   className={cn(
-                    "mb-3 space-y-1 rounded-[10px] px-2.5 py-2 text-[12px]",
-                    dark
-                      ? "bg-white/8 text-white/65"
-                      : "bg-[#ECECE8] text-[var(--text-secondary)]",
+                    "mb-3 space-y-1 text-[12px]",
+                    dark ? "text-white/65" : "text-[var(--text-secondary)]",
                   )}
                   dir="rtl"
                 >
@@ -477,7 +715,7 @@ function MessageBubble({
                   ) : null}
                   <div>
                     <span className="font-medium">תאריך: </span>
-                    {fullDate}
+                    {fullStamp}
                   </div>
                 </div>
               </div>
@@ -489,16 +727,21 @@ function MessageBubble({
               renderQuoted={({ text, dark: isDark }) => (
                 <QuotedBlock text={text} dark={isDark} />
               )}
-              renderAttachment={({ file, dark: isDark }) => (
-                <AttachmentRow file={file} dark={isDark} />
-              )}
             />
 
-            {!hasContentAttachments && attachments.length > 0 ? (
-              <div className="mt-3 space-y-1.5">
-                {attachments.map((file) => (
-                  <AttachmentRow key={file.id} file={file} dark={dark} />
-                ))}
+            {attachments.length > 0 ? (
+              <div className="mt-[14px]">
+                <AttachmentStack files={attachments} dark={dark} />
+              </div>
+            ) : null}
+
+            {repliedTo ? (
+              <div
+                className={cn(
+                  attachments.length > 0 ? "mt-[10px]" : "mt-[14px]",
+                )}
+              >
+                <ReplyToBlock source={repliedTo} dark={dark} />
               </div>
             ) : null}
           </div>
@@ -597,10 +840,10 @@ export function ConversationPanel({ threadId }: { threadId: string }) {
         ))}
       </div>
 
-      <div className="sticky bottom-0 z-20 shrink-0 border-t border-[#E7E7E1] bg-white px-8 py-3">
-        <div className="rounded-[14px] border border-[#E7E7E1] bg-white px-3.5 pt-2.5 pb-2.5">
+      <div className="sticky bottom-0 z-20 shrink-0 border-t border-[var(--border)] bg-white px-8 py-3">
+        <div className="rounded-[14px] border border-[var(--border)] bg-white px-3.5 pt-2.5 pb-2.5">
           {draftActionCount > 0 ? (
-            <div className="mb-2 rounded-[8px] bg-[#F6F6F3] px-2.5 py-1.5 text-[12px] text-[var(--text-secondary)]">
+            <div className="mb-2 rounded-[8px] bg-[var(--surface-subtle)] px-2.5 py-1.5 text-[12px] text-[var(--text-secondary)]">
               {draftActionCount === 1
                 ? "הטיוטה מתייחסת לפעולה שנדרשה ממך"
                 : `הטיוטה מתייחסת ל־${draftActionCount} הפעולות שנדרשו ממך`}
@@ -612,7 +855,7 @@ export function ConversationPanel({ threadId }: { threadId: string }) {
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1 rounded-[8px] px-1.5 py-1 text-[12.5px] font-medium text-[#363633] hover:bg-[#F6F6F3]"
+                  className="inline-flex items-center gap-1 rounded-[8px] px-1.5 py-1 text-[12.5px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
                 >
                   {modeLabel}
                   <ChevronDown className="size-3.5 text-[var(--text-muted)]" strokeWidth={1.75} />
@@ -672,7 +915,7 @@ export function ConversationPanel({ threadId }: { threadId: string }) {
                   dispatch({ type: "SET_COMPOSER_TEXT", text: improved });
                   toast("הניסוח שופר (מדומה)");
                 }}
-                className="inline-flex h-9 items-center gap-1.5 rounded-[10px] px-2 text-[12.5px] text-[var(--text-secondary)] hover:bg-[#F6F6F3] hover:text-[#363633]"
+                className="inline-flex h-9 items-center gap-1.5 rounded-[10px] px-2 text-[12.5px] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
               >
                 <Sparkles className="size-4" strokeWidth={1.75} />
                 שפר ניסוח
@@ -689,7 +932,7 @@ export function ConversationPanel({ threadId }: { threadId: string }) {
                 toast.success("התשובה נשלחה");
                 dispatch({ type: "SET_COMPOSER_TEXT", text: "" });
               }}
-              className="inline-flex h-9 items-center gap-2 rounded-[var(--radius-pill)] bg-[#343a40] px-4 text-[13px] font-medium text-white hover:bg-[#212529]"
+              className="inline-flex h-9 items-center gap-2 rounded-[var(--radius-pill)] bg-[var(--action-primary)] px-4 text-[13px] font-medium text-white hover:bg-[var(--action-primary-hover)]"
             >
               <Send className="size-3.5" strokeWidth={1.75} />
               שליחה

@@ -18,17 +18,10 @@ import {
 } from "@/components/ui/tooltip";
 import { useWorkspace } from "@/state/workspace";
 import type {
-  Attachment,
   Message,
   MessageContentBlock,
   MessageInlineImageBlock,
 } from "@/types/domain";
-import { attachments as allAttachments } from "@/mocks/data";
-
-type AttachmentRowRender = (props: {
-  file: Attachment;
-  dark: boolean;
-}) => React.ReactNode;
 
 type QuotedBlockRender = (props: {
   text: string;
@@ -57,6 +50,11 @@ function groupContent(blocks: MessageContentBlock[]): ContentGroup[] {
       }
       continue;
     }
+    // Attachments + quoted replies are rendered by MessageBubble (order + progressive disclosure)
+    if (block.type === "attachment" || block.type === "quoted-text") {
+      i += 1;
+      continue;
+    }
     groups.push({ kind: "block", block });
     i += 1;
   }
@@ -76,7 +74,7 @@ function PrivacyBlockedPlaceholder({
     <div
       className={cn(
         "my-2.5 flex flex-col items-center justify-center gap-2.5 rounded-[12px] px-4 py-8 text-center",
-        dark ? "bg-white/8" : "bg-[#ECECE8]",
+        dark ? "bg-white/8" : "bg-[var(--surface-selected)]",
       )}
     >
       <ImageOff
@@ -100,8 +98,8 @@ function PrivacyBlockedPlaceholder({
         className={cn(
           "rounded-[10px] px-3.5 py-1.5 text-[12.5px] font-medium transition-colors",
           dark
-            ? "bg-white text-[#363633] hover:bg-white/90"
-            : "bg-[#343a40] text-white hover:bg-[#212529]",
+            ? "bg-white text-[var(--text-primary)] hover:bg-white/90"
+            : "bg-[var(--action-primary)] text-white hover:bg-[var(--action-primary-hover)]",
         )}
       >
         הצג תמונות
@@ -137,7 +135,7 @@ function ImageErrorState({
     <div
       className={cn(
         "my-2.5 flex flex-col items-center justify-center gap-2 rounded-[12px] px-4 py-7 text-center",
-        dark ? "bg-white/8" : "bg-[#ECECE8]",
+        dark ? "bg-white/8" : "bg-[var(--surface-selected)]",
       )}
     >
       <ImageOff
@@ -272,8 +270,10 @@ function InlineImageView({
     <div
       className={cn(
         "group/img relative overflow-hidden rounded-[12px]",
-        compact ? "my-0 aspect-[4/3] bg-[#2a2e30]" : "my-2.5 min-h-[120px]",
-        !compact && (dark ? "bg-white/8" : "bg-[#ECECE8]"),
+        compact
+          ? "my-0 aspect-[4/3] bg-[var(--surface-selected)]"
+          : "my-2.5 bg-[var(--surface-selected)]",
+        dark && "bg-white/10",
       )}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -291,22 +291,21 @@ function InlineImageView({
         }}
         onClick={() => onOpenLightbox(image)}
         className={cn(
-          "relative z-[1] block w-full max-w-full cursor-zoom-in object-contain transition-opacity duration-200",
+          "relative z-[1] block w-full max-w-full cursor-zoom-in object-contain",
           compact ? "h-full object-cover" : "h-auto",
-          loaded ? "opacity-100" : "opacity-0",
         )}
       />
       {!loaded ? (
         <div
           className={cn(
-            "pointer-events-none absolute inset-0 z-0 animate-pulse",
-            dark ? "bg-white/10" : "bg-[#E2E2DC]",
+            "pointer-events-none absolute inset-0 z-[2] animate-pulse",
+            dark ? "bg-white/12" : "bg-[var(--surface-hover)]",
           )}
           aria-hidden
         />
       ) : null}
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-[2] flex justify-end gap-1 p-2 opacity-0 transition-opacity duration-[120ms] group-hover/img:pointer-events-auto group-hover/img:opacity-100">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-[3] flex justify-end gap-1 p-2 opacity-0 transition-opacity duration-[120ms] group-hover/img:pointer-events-auto group-hover/img:opacity-100">
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -379,7 +378,7 @@ function ListBlock({
       className={cn(
         "bidi-content my-2 list-inside space-y-1 text-[15px] leading-[1.7]",
         ordered ? "list-decimal" : "list-disc",
-        dark ? "text-[#FCFCF8]" : "text-[#363633]",
+        dark ? "text-white" : "text-[var(--text-primary)]",
       )}
       dir="auto"
     >
@@ -397,12 +396,10 @@ function ListBlock({
 export function MessageBody({
   message,
   dark,
-  renderAttachment,
   renderQuoted,
 }: {
   message: Message;
   dark: boolean;
-  renderAttachment: AttachmentRowRender;
   renderQuoted: QuotedBlockRender;
 }) {
   const blocks = getRenderableContent(message);
@@ -410,8 +407,6 @@ export function MessageBody({
   const [lightbox, setLightbox] = React.useState<MessageInlineImageBlock | null>(
     null,
   );
-
-  const hasStructuredQuoted = message.content?.some((b) => b.type === "quoted-text");
 
   return (
     <>
@@ -452,10 +447,6 @@ export function MessageBody({
                   dark={dark}
                 />
               );
-            case "quoted-text":
-              return (
-                <div key={block.id}>{renderQuoted({ text: block.text, dark })}</div>
-              );
             case "inline-image":
               return (
                 <InlineImageView
@@ -466,30 +457,21 @@ export function MessageBody({
                   onOpenLightbox={setLightbox}
                 />
               );
-            case "attachment": {
-              const file = allAttachments.find((a) => a.id === block.attachmentId);
-              if (!file) return null;
-              return (
-                <div key={block.id} className="mt-3">
-                  {renderAttachment({ file, dark })}
-                </div>
-              );
-            }
             default:
               return null;
           }
         })}
       </div>
 
-      {!hasStructuredQuoted && message.quotedText
-        ? renderQuoted({ text: message.quotedText, dark })
-        : null}
-      {message.signature && !message.content
+      {message.signature && !message.content && !message.signatureSnapshot
         ? renderQuoted({ text: message.signature, dark })
         : null}
 
       <Dialog open={Boolean(lightbox)} onOpenChange={(open) => !open && setLightbox(null)}>
-        <DialogContent className="w-[min(96vw,920px)] max-w-[920px] overflow-hidden p-3">
+        <DialogContent
+          showClose={false}
+          className="w-[min(94vw,880px)] max-w-[880px] overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--surface)] p-0 shadow-[var(--shadow-overlay)]"
+        >
           <DialogTitle className="sr-only">
             {lightbox?.fileName ?? "תמונה"}
           </DialogTitle>
@@ -497,27 +479,32 @@ export function MessageBody({
             {lightbox?.alt ?? "תצוגה בגודל מלא"}
           </DialogDescription>
           {lightbox ? (
-            <div className="space-y-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={
-                  lightbox.forceError
-                    ? "/mock-mail/retry-fallback.jpg"
-                    : lightbox.src
-                }
-                alt={lightbox.alt ?? lightbox.fileName}
-                className="mx-auto max-h-[80vh] w-auto max-w-full rounded-[12px] object-contain"
-              />
-              <div className="flex items-center justify-between gap-2 px-1">
-                <bdi className="truncate text-[13px] text-[var(--text-secondary)]">
-                  {lightbox.fileName}
-                </bdi>
+            <div className="flex flex-col" dir="rtl">
+              <div className="bg-[var(--surface-subtle)] p-5">
+                <div className="overflow-hidden rounded-[14px] border border-[var(--border)] bg-[var(--surface)]">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={
+                      lightbox.forceError
+                        ? "/mock-mail/retry-fallback.jpg"
+                        : lightbox.src
+                    }
+                    alt={lightbox.alt ?? lightbox.fileName}
+                    className="mx-auto block max-h-[min(72vh,720px)] w-auto max-w-full object-contain"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--surface)] px-5 py-3.5">
+                <p className="min-w-0 truncate text-[13.5px] font-semibold text-[var(--text-primary)]">
+                  <bdi>{lightbox.fileName}</bdi>
+                </p>
                 <button
                   type="button"
                   onClick={() => toast(`הורדה מדומה — ${lightbox.fileName}`)}
-                  className="inline-flex items-center gap-1.5 rounded-[8px] px-2 py-1 text-[12.5px] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+                  className="inline-flex h-9 shrink-0 items-center gap-2 rounded-[var(--radius-pill)] border border-[var(--border)] bg-[var(--surface-subtle)] px-4 text-[13px] font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-hover)]"
                 >
-                  <Download className="size-3.5" strokeWidth={1.75} />
+                  <Download className="size-4" strokeWidth={1.75} />
                   הורד תמונה
                 </button>
               </div>

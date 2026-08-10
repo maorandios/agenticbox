@@ -9,7 +9,6 @@ import {
   Clock3,
   Copy,
   Download,
-  FileText,
   MessagesSquare,
   MoreHorizontal,
   Paperclip,
@@ -32,6 +31,7 @@ import {
   getParticipant,
   getThreadFileItems,
 } from "@/mocks";
+import { AttachmentTypeIcon } from "@/components/conversation/AttachmentTypeIcon";
 import { IconButton } from "@/components/shared/IconButton";
 import {
   DropdownMenu,
@@ -284,9 +284,9 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
                               className="px-3 py-2.5 hover:bg-[var(--surface-subtle)]"
                             >
                               <div className="flex items-start gap-2.5">
-                                <FileText
-                                  className="mt-0.5 size-4 shrink-0 text-[var(--text-secondary)]"
-                                  strokeWidth={1.75}
+                                <AttachmentTypeIcon
+                                  file={file}
+                                  className="mt-0.5 text-[var(--text-secondary)]"
                                 />
                                 <div className="min-w-0 flex-1">
                                   <div className="truncate text-[12.5px] font-medium text-[var(--text-primary)]">

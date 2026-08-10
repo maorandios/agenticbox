@@ -34,7 +34,7 @@ function DialogOverlay({
   return (
     <DialogPrimitive.Overlay
       className={cn(
-        "fixed inset-0 z-50 bg-[rgba(28,28,27,0.28)] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+        "fixed inset-0 z-50 bg-[rgba(33,37,41,0.32)] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
         className,
       )}
       {...props}
@@ -45,8 +45,11 @@ function DialogOverlay({
 function DialogContent({
   className,
   children,
+  showClose = true,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content>) {
+}: React.ComponentProps<typeof DialogPrimitive.Content> & {
+  showClose?: boolean;
+}) {
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -59,12 +62,14 @@ function DialogContent({
         {...props}
       >
         {children}
-        <DialogPrimitive.Close
-          className="absolute top-4 left-4 inline-flex size-9 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)]"
-          aria-label="סגור"
-        >
-          <X className="size-[18px]" strokeWidth={1.75} />
-        </DialogPrimitive.Close>
+        {showClose ? (
+          <DialogPrimitive.Close
+            className="absolute top-4 left-4 inline-flex size-9 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)]"
+            aria-label="סגור"
+          >
+            <X className="size-[18px]" strokeWidth={1.75} />
+          </DialogPrimitive.Close>
+        ) : null}
       </DialogPrimitive.Content>
     </DialogPortal>
   );
