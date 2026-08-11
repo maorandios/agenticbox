@@ -5,14 +5,12 @@ import {
   Archive,
   CalendarDays,
   ChevronDown,
-  CircleX,
   Clock3,
   Download,
   MailOpen,
   MessagesSquare,
   MoreHorizontal,
   Paperclip,
-  Search,
   Sparkles,
   Star,
   Trash2,
@@ -132,16 +130,11 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
   const messages = getMessagesForThread(thread.id);
   const threadAttachments = getThreadFileItems(thread.id);
   const [recipientsExpanded, setRecipientsExpanded] = React.useState(false);
-  const [askOpen, setAskOpen] = React.useState(false);
-  const [askQuery, setAskQuery] = React.useState("");
-  const [answerOpen, setAnswerOpen] = React.useState(false);
   const [filesOpen, setFilesOpen] = React.useState(false);
+  const askOpen = state.leftPanelMode === "thread-ai";
 
   React.useEffect(() => {
     setRecipientsExpanded(false);
-    setAskOpen(false);
-    setAskQuery("");
-    setAnswerOpen(false);
     setFilesOpen(false);
   }, [thread.id]);
 
@@ -168,7 +161,6 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
   const highlightSource = (messageId: string) => {
     dispatch({ type: "HIGHLIGHT_MESSAGE", messageId });
     setFilesOpen(false);
-    setAnswerOpen(false);
   };
 
   const toggleStar = () => {
@@ -196,11 +188,6 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
           dispatch({ type: "UNARCHIVE_THREAD", threadId: thread.id }),
       },
     });
-  };
-
-  const showAnswer = (query: string) => {
-    setAskQuery(query);
-    setAnswerOpen(true);
   };
 
   return (
@@ -343,29 +330,32 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
             <TooltipTrigger asChild>
               <button
                 type="button"
-                aria-label="חיפוש"
+                aria-label={askOpen ? "פאנל השאלות פתוח" : "שאל על השרשור"}
                 aria-expanded={askOpen}
                 aria-pressed={askOpen}
                 onClick={() => {
                   if (askOpen) {
-                    setAskOpen(false);
-                    setAnswerOpen(false);
-                    setAskQuery("");
+                    dispatch({ type: "CLOSE_THREAD_AI" });
                   } else {
-                    setAskOpen(true);
+                    dispatch({
+                      type: "OPEN_THREAD_AI",
+                      threadId: thread.id,
+                    });
                   }
                 }}
                 className={cn(
                   "inline-flex size-9 items-center justify-center rounded-[var(--radius-icon)] transition-colors",
                   askOpen
-                    ? "bg-[var(--surface-hover)] text-[var(--text-primary)]"
+                    ? "bg-[var(--action-primary)] text-white"
                     : "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]",
                 )}
               >
-                <Search className="size-[16px]" strokeWidth={1.75} />
+                <Sparkles className="size-[16px]" strokeWidth={1.75} />
               </button>
             </TooltipTrigger>
-            <TooltipContent>חיפוש</TooltipContent>
+            <TooltipContent>
+              {askOpen ? "פאנל השאלות פתוח" : "שאל על השרשור"}
+            </TooltipContent>
           </Tooltip>
 
           <Tooltip>
@@ -471,126 +461,6 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
         />
       </div>
       </div>
-
-      {askOpen ? (
-        <div className="relative border-b border-[var(--border)] px-8 py-2.5">
-          <div className="flex h-[34px] w-full max-w-[420px] items-center overflow-hidden rounded-full border border-[var(--border)] bg-white shadow-[0_0_0_1px_var(--border)]">
-            {askQuery ? (
-              <button
-                type="button"
-                aria-label="נקה טקסט"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  setAskQuery("");
-                  setAnswerOpen(false);
-                }}
-                className="ms-1.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
-              >
-                <CircleX className="size-4" strokeWidth={1.75} />
-              </button>
-            ) : null}
-            <input
-              autoFocus
-              value={askQuery}
-              onChange={(e) => setAskQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && askQuery.trim()) {
-                  showAnswer(askQuery.trim());
-                }
-                if (e.key === "Escape") {
-                  setAskOpen(false);
-                  setAnswerOpen(false);
-                  setAskQuery("");
-                }
-              }}
-              placeholder="מה תרצו לדעת?"
-              className="h-full min-w-0 flex-1 bg-transparent pe-2 ps-2 text-right text-[13px] outline-none placeholder:text-right placeholder:text-[var(--text-muted)]"
-              dir="rtl"
-            />
-            <button
-              type="button"
-              aria-label="חיפוש"
-              disabled={!askQuery.trim()}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                if (askQuery.trim()) showAnswer(askQuery.trim());
-              }}
-              className="me-1 flex size-7 shrink-0 items-center justify-center rounded-full bg-[var(--action-primary)] text-white transition-colors hover:bg-[var(--action-primary-hover)] disabled:opacity-35"
-            >
-              <Search className="size-3.5" strokeWidth={1.75} />
-            </button>
-          </div>
-
-          {answerOpen ? (
-            <div className="absolute inset-x-8 top-[calc(100%+2px)] z-30 max-w-[420px] overflow-hidden rounded-[16px] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-overlay)]">
-              <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--surface-subtle)] px-3.5 py-2.5">
-                <div className="flex min-w-0 items-center gap-2">
-                  <Sparkles
-                    className="size-3.5 shrink-0 text-[var(--text-secondary)]"
-                    strokeWidth={1.75}
-                  />
-                  <p className="text-[12px] font-semibold text-[var(--text-primary)]">
-                    תשובה מהשרשור
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  aria-label="סגור תשובה"
-                  onClick={() => setAnswerOpen(false)}
-                  className="inline-flex size-7 shrink-0 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-white hover:text-[var(--text-primary)]"
-                >
-                  <X className="size-3.5" strokeWidth={1.75} />
-                </button>
-              </div>
-
-              <div className="px-3.5 py-3">
-                <p className="text-[13.5px] leading-[1.65] text-[var(--text-primary)]">
-                  הכמות האחרונה שסוכמה בשרשור היא{" "}
-                  <span className="font-semibold">65 יחידות</span>, לאחר עדכון מ־40.
-                  מועד היעד שצוין הוא 18 באוגוסט.
-                </p>
-              </div>
-
-              <div className="border-t border-[var(--border)] px-3.5 py-2.5">
-                <p className="mb-2 text-[11px] font-semibold text-[var(--text-muted)]">
-                  מקורות
-                </p>
-                <div className="space-y-2">
-                  {(
-                    [
-                      {
-                        id: "msg-city-1",
-                        label: "עדכון הכמות",
-                        quote:
-                          "הכמות עודכנה מ־40 ל־65 יחידות, ולכן נדרש תיאום מחדש של לוח הזמנים.",
-                      },
-                      {
-                        id: "msg-city-5",
-                        label: "מועד היעד",
-                        quote: "נוסף מועד יעד: 18 באוגוסט. ההתקנה תתבצע בשני שלבים.",
-                      },
-                    ] as const
-                  ).map((source) => (
-                    <button
-                      key={source.id}
-                      type="button"
-                      onClick={() => highlightSource(source.id)}
-                      className="block w-full border-r-2 border-[var(--action-primary)] pr-3 text-start transition-colors hover:bg-[var(--surface-subtle)]"
-                    >
-                      <span className="block text-[11.5px] font-semibold text-[var(--text-secondary)]">
-                        {source.label}
-                      </span>
-                      <span className="mt-0.5 block text-[12px] leading-5 text-[var(--text-muted)]">
-                        “{source.quote}”
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
     </header>
   );
 }

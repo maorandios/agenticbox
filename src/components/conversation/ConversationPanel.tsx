@@ -11,6 +11,7 @@ import {
   Paperclip,
   Reply,
   ReplyAll,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -450,6 +451,18 @@ function MessageToolbar({
 
   const actions = [
     {
+      label: "שאל על ההודעה",
+      icon: Sparkles,
+      onClick: () => {
+        dispatch({
+          type: "OPEN_THREAD_AI",
+          threadId: message.threadId,
+          focusedMessageId: message.id,
+        });
+        dispatch({ type: "HIGHLIGHT_MESSAGE", messageId: message.id });
+      },
+    },
+    {
       label: "השב",
       icon: Reply,
       onClick: () => {
@@ -771,6 +784,8 @@ export function ConversationPanel({ threadId }: { threadId: string }) {
   const [pendingOutbound, setPendingOutbound] = React.useState<PendingOutbound[]>(
     [],
   );
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const prevThreadIdRef = React.useRef(threadId);
 
   const baseMessages = getMessagesForThread(threadId).filter(
     (message) => !state.deletedMessageIds.includes(message.id),
@@ -798,6 +813,39 @@ export function ConversationPanel({ threadId }: { threadId: string }) {
     }, 1500);
     return () => window.clearTimeout(timer);
   }, [state.highlightedMessageId, dispatch]);
+
+  React.useEffect(() => {
+    const el = scrollRef.current;
+    const previousId = prevThreadIdRef.current;
+    if (el && previousId !== threadId) {
+      dispatch({
+        type: "SET_THREAD_SCROLL",
+        threadId: previousId,
+        scrollTop: el.scrollTop,
+      });
+    }
+    prevThreadIdRef.current = threadId;
+
+    const restore = state.threadScrollByThreadId[threadId] ?? 0;
+    const frame = window.requestAnimationFrame(() => {
+      if (scrollRef.current) scrollRef.current.scrollTop = restore;
+    });
+    return () => window.cancelAnimationFrame(frame);
+    // Only re-run on thread change; scroll map read is intentional snapshot
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threadId, dispatch]);
+
+  React.useEffect(() => {
+    return () => {
+      const el = scrollRef.current;
+      if (!el) return;
+      dispatch({
+        type: "SET_THREAD_SCROLL",
+        threadId: prevThreadIdRef.current,
+        scrollTop: el.scrollTop,
+      });
+    };
+  }, [dispatch]);
 
   if (!thread) return null;
 
@@ -834,7 +882,10 @@ export function ConversationPanel({ threadId }: { threadId: string }) {
     <div className="flex h-full min-h-0 flex-col bg-white">
       <ThreadHeader thread={thread} />
 
-      <div className="thin-scroll min-h-0 flex-1 space-y-5 overflow-y-auto px-8 py-5">
+      <div
+        ref={scrollRef}
+        className="thin-scroll min-h-0 flex-1 space-y-5 overflow-y-auto px-8 py-5"
+      >
         {messages.map((message) => (
           <div key={message.id} className="space-y-1">
             <MessageBubble

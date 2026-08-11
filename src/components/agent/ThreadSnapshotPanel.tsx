@@ -15,6 +15,7 @@ import {
 import { cn } from "@/lib/cn";
 import { CURRENT_USER_ID, getThreadSnapshot } from "@/mocks";
 import { NeedsYouCard } from "@/components/agent/NeedsYouCard";
+import { ThreadAiPanel } from "@/components/agent/ThreadAiPanel";
 import {
   Tooltip,
   TooltipContent,
@@ -190,7 +191,21 @@ function SnapshotSection({
 
 export function ThreadSnapshotPanel({ threadId }: { threadId: string }) {
   const snapshot = getThreadSnapshot(threadId);
-  const { dispatch } = useWorkspace();
+  const { state, dispatch } = useWorkspace();
+  const insightsRef = React.useRef<HTMLDivElement>(null);
+  const aiOpen = state.leftPanelMode === "thread-ai";
+
+  React.useEffect(() => {
+    dispatch({ type: "ON_THREAD_CHANGE", threadId });
+  }, [threadId, dispatch]);
+
+  React.useEffect(() => {
+    if (aiOpen) return;
+    const el = insightsRef.current;
+    if (!el) return;
+    el.scrollTop = state.insightsScrollTop;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiOpen, threadId]);
 
   const showSource = (messageId: string) => {
     dispatch({ type: "HIGHLIGHT_MESSAGE", messageId });
@@ -198,46 +213,75 @@ export function ThreadSnapshotPanel({ threadId }: { threadId: string }) {
 
   return (
     <aside
-      className={cn(
-        "snapshot-panel flex h-full w-[var(--snapshot-width)] shrink-0 flex-col border-r border-[var(--border)] bg-white",
-      )}
-      aria-label="תמונת השרשור"
+      className="snapshot-panel relative flex h-full w-[var(--snapshot-width)] shrink-0 flex-col overflow-hidden border-r border-[var(--border)] bg-white"
+      aria-label={aiOpen ? "מה תרצו לדעת" : "תמונת השרשור"}
     >
-      <div className="snapshot-scroll thin-scroll min-h-0 flex-1 space-y-[10px] overflow-y-auto px-[14px] pt-[14px] pb-[14px]">
-        {snapshot.primary.mode === "needs_you" ? (
-          <NeedsYouCard
-            threadId={threadId}
-            actions={snapshot.primary.actions}
-            draftReply={snapshot.primary.draftReply}
-          />
-        ) : null}
+      <div
+        className={cn(
+          "absolute inset-0 flex flex-col transition-[transform,opacity] duration-[320ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform",
+          aiOpen
+            ? "pointer-events-none translate-x-8 opacity-0"
+            : "translate-x-0 opacity-100",
+        )}
+        aria-hidden={aiOpen}
+      >
+        <div
+          ref={insightsRef}
+          className="snapshot-scroll thin-scroll min-h-0 flex-1 space-y-[10px] overflow-y-auto px-[14px] pt-[14px] pb-[14px]"
+          onScroll={(e) => {
+            dispatch({
+              type: "SET_INSIGHTS_SCROLL",
+              scrollTop: e.currentTarget.scrollTop,
+            });
+          }}
+        >
+          {snapshot.primary.mode === "needs_you" ? (
+            <NeedsYouCard
+              threadId={threadId}
+              actions={snapshot.primary.actions}
+              draftReply={snapshot.primary.draftReply}
+            />
+          ) : null}
 
-        <SnapshotSection
-          title="שינויים אחרונים"
-          icon={History}
-          items={snapshot.recentChanges}
-          onSelect={showSource}
-        />
-        <SnapshotSection
-          title="משימות פתוחות"
-          icon={ListChecks}
-          items={snapshot.openTasks}
-          onSelect={showSource}
-          prioritizeCurrentUser
-          showDueInline
-        />
-        <SnapshotSection
-          title="החלטות שהתקבלו"
-          icon={BadgeCheck}
-          items={snapshot.decisions}
-          onSelect={showSource}
-        />
-        <SnapshotSection
-          title="ממתינים"
-          icon={Clock3}
-          items={snapshot.waitingOn}
-          onSelect={showSource}
-        />
+          <SnapshotSection
+            title="שינויים אחרונים"
+            icon={History}
+            items={snapshot.recentChanges}
+            onSelect={showSource}
+          />
+          <SnapshotSection
+            title="משימות פתוחות"
+            icon={ListChecks}
+            items={snapshot.openTasks}
+            onSelect={showSource}
+            prioritizeCurrentUser
+            showDueInline
+          />
+          <SnapshotSection
+            title="החלטות שהתקבלו"
+            icon={BadgeCheck}
+            items={snapshot.decisions}
+            onSelect={showSource}
+          />
+          <SnapshotSection
+            title="ממתינים"
+            icon={Clock3}
+            items={snapshot.waitingOn}
+            onSelect={showSource}
+          />
+        </div>
+      </div>
+
+      <div
+        className={cn(
+          "absolute inset-0 flex flex-col transition-[transform,opacity] duration-[320ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform",
+          aiOpen
+            ? "translate-x-0 opacity-100"
+            : "pointer-events-none -translate-x-8 opacity-0",
+        )}
+        aria-hidden={!aiOpen}
+      >
+        <ThreadAiPanel threadId={threadId} />
       </div>
     </aside>
   );

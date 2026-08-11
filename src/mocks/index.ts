@@ -48,6 +48,8 @@ export {
   threads,
 };
 
+export { askThreadQuestion, THREAD_ASK_SUGGESTIONS } from "@/mocks/threadAsk";
+
 export type ThreadFileItem = {
   id: string;
   fileName: string;

@@ -1,12 +1,22 @@
 "use client";
 
 import * as React from "react";
-import type { MailboxStatus, SearchMode, Task, ThreadStatus } from "@/types/domain";
+import type { MailboxStatus, SearchMode, Task, ThreadAskTurn, ThreadStatus } from "@/types/domain";
 import type { MailboxView, SmartFilter } from "@/mocks";
 
 export type ComposerMode = "reply" | "replyAll" | "forward";
 
 export type InboxFilter = MailboxView | SmartFilter;
+
+export type LeftPanelMode = "insights" | "thread-ai";
+
+export type ThreadAskSession = {
+  turns: ThreadAskTurn[];
+  draft: string;
+  focusedMessageId: string | null;
+  scrollTop: number;
+  generating: boolean;
+};
 
 export type PrimaryActionStatus =
   | "active"
@@ -74,6 +84,14 @@ export type WorkspaceState = {
   };
   mailboxStatus: MailboxStatus;
   highlightedMessageId: string | null;
+  leftPanelMode: LeftPanelMode;
+  insightsScrollTop: number;
+  /** Bumps when AI input should receive focus */
+  threadAskFocusToken: number;
+  /** Per-thread Q&A session for "שאל על השרשור" */
+  threadAskByThreadId: Record<string, ThreadAskSession>;
+  /** Message-list scrollTop restored when returning to a thread */
+  threadScrollByThreadId: Record<string, number>;
 };
 
 export type WorkspaceAction =
@@ -105,6 +123,26 @@ export type WorkspaceAction =
   | { type: "SET_SEARCH_STATUS"; status: WorkspaceState["search"]["status"]; resultId?: string }
   | { type: "SET_MAILBOX_STATUS"; status: MailboxStatus }
   | { type: "HIGHLIGHT_MESSAGE"; messageId: string | null }
+  | { type: "SET_LEFT_PANEL_MODE"; mode: LeftPanelMode }
+  | {
+      type: "OPEN_THREAD_AI";
+      threadId: string;
+      focusedMessageId?: string | null;
+    }
+  | { type: "CLOSE_THREAD_AI" }
+  | { type: "ADD_THREAD_ASK_TURN"; turn: ThreadAskTurn }
+  | { type: "CLEAR_THREAD_ASK"; threadId: string }
+  | { type: "SET_THREAD_ASK_DRAFT"; threadId: string; draft: string }
+  | {
+      type: "SET_THREAD_ASK_FOCUSED_MESSAGE";
+      threadId: string;
+      messageId: string | null;
+    }
+  | { type: "SET_THREAD_ASK_SCROLL"; threadId: string; scrollTop: number }
+  | { type: "SET_THREAD_ASK_GENERATING"; threadId: string; generating: boolean }
+  | { type: "SET_INSIGHTS_SCROLL"; scrollTop: number }
+  | { type: "ON_THREAD_CHANGE"; threadId: string }
+  | { type: "SET_THREAD_SCROLL"; threadId: string; scrollTop: number }
   | { type: "TOGGLE_STAR_THREAD"; threadId: string }
   | { type: "ARCHIVE_THREAD"; threadId: string }
   | { type: "UNARCHIVE_THREAD"; threadId: string }
@@ -178,7 +216,37 @@ export const initialWorkspaceState: WorkspaceState = {
   },
   mailboxStatus: "connected",
   highlightedMessageId: null,
+  leftPanelMode: "insights",
+  insightsScrollTop: 0,
+  threadAskFocusToken: 0,
+  threadAskByThreadId: {},
+  threadScrollByThreadId: {},
 };
+
+function emptyAskSession(): ThreadAskSession {
+  return {
+    turns: [],
+    draft: "",
+    focusedMessageId: null,
+    scrollTop: 0,
+    generating: false,
+  };
+}
+
+function patchAskSession(
+  state: WorkspaceState,
+  threadId: string,
+  patch: Partial<ThreadAskSession>,
+): WorkspaceState {
+  const current = state.threadAskByThreadId[threadId] ?? emptyAskSession();
+  return {
+    ...state,
+    threadAskByThreadId: {
+      ...state.threadAskByThreadId,
+      [threadId]: { ...current, ...patch },
+    },
+  };
+}
 
 function patchPrimaryAction(
   state: WorkspaceState,
@@ -424,6 +492,79 @@ export function workspaceReducer(
       return { ...state, mailboxStatus: action.status };
     case "HIGHLIGHT_MESSAGE":
       return { ...state, highlightedMessageId: action.messageId };
+    case "SET_LEFT_PANEL_MODE":
+      return { ...state, leftPanelMode: action.mode };
+    case "OPEN_THREAD_AI": {
+      const current = state.threadAskByThreadId[action.threadId] ?? emptyAskSession();
+      const focused =
+        action.focusedMessageId === undefined
+          ? current.focusedMessageId
+          : action.focusedMessageId;
+      return {
+        ...patchAskSession(state, action.threadId, {
+          focusedMessageId: focused,
+        }),
+        leftPanelMode: "thread-ai",
+        threadAskFocusToken: state.threadAskFocusToken + 1,
+      };
+    }
+    case "CLOSE_THREAD_AI":
+      return { ...state, leftPanelMode: "insights" };
+    case "ADD_THREAD_ASK_TURN": {
+      const current =
+        state.threadAskByThreadId[action.turn.threadId] ?? emptyAskSession();
+      return patchAskSession(state, action.turn.threadId, {
+        turns: [...current.turns, action.turn],
+        generating: false,
+        draft: "",
+      });
+    }
+    case "CLEAR_THREAD_ASK":
+      return patchAskSession(state, action.threadId, {
+        turns: [],
+        draft: "",
+        generating: false,
+      });
+    case "SET_THREAD_ASK_DRAFT":
+      return patchAskSession(state, action.threadId, { draft: action.draft });
+    case "SET_THREAD_ASK_FOCUSED_MESSAGE":
+      return patchAskSession(state, action.threadId, {
+        focusedMessageId: action.messageId,
+      });
+    case "SET_THREAD_ASK_SCROLL":
+      return patchAskSession(state, action.threadId, {
+        scrollTop: action.scrollTop,
+      });
+    case "SET_THREAD_ASK_GENERATING":
+      return patchAskSession(state, action.threadId, {
+        generating: action.generating,
+      });
+    case "SET_INSIGHTS_SCROLL":
+      return { ...state, insightsScrollTop: action.scrollTop };
+    case "ON_THREAD_CHANGE": {
+      const session =
+        state.threadAskByThreadId[action.threadId] ?? emptyAskSession();
+      return {
+        ...state,
+        leftPanelMode: "insights",
+        threadAskByThreadId: {
+          ...state.threadAskByThreadId,
+          [action.threadId]: {
+            ...session,
+            focusedMessageId: null,
+            generating: false,
+          },
+        },
+      };
+    }
+    case "SET_THREAD_SCROLL":
+      return {
+        ...state,
+        threadScrollByThreadId: {
+          ...state.threadScrollByThreadId,
+          [action.threadId]: action.scrollTop,
+        },
+      };
     case "TOGGLE_STAR_THREAD": {
       const starred = state.starredThreadIds.includes(action.threadId);
       return {

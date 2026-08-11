@@ -259,6 +259,33 @@ export type SearchResult = {
   threadIds: string[];
 };
 
+/** Clickable source for thread Q&A answers */
+export type ThreadAskSource = {
+  messageId: string;
+  senderName: string;
+  senderEmail?: string;
+  sentAt: string;
+  excerpt: string;
+};
+
+export type ThreadAskKind =
+  | "answer"
+  | "clarification"
+  | "not_found"
+  | "file_not_analyzed";
+
+/** One Q&A turn in "שאל על השרשור" — read-only, no mail/task mutations */
+export type ThreadAskTurn = {
+  id: string;
+  threadId: string;
+  question: string;
+  kind: ThreadAskKind;
+  answer: string;
+  sources: ThreadAskSource[];
+  clarificationOptions?: string[];
+  createdAt: string;
+};
+
 export type ThreadSnapshotPrimaryMode = "needs_you" | "none";
 
 export type ThreadPrimaryAction = {
