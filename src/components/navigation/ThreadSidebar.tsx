@@ -21,14 +21,9 @@ import { toast } from "sonner";
 import { cn } from "@/lib/cn";
 import { formatThreadTime } from "@/lib/format";
 import { getDisplayInitials } from "@/lib/initials";
-import {
-  getThreadAttachmentCount,
-  getThreadPrimaryParticipant,
-  getThreadsByInboxFilter,
-  isDraftThread,
-  mailboxDisplayCounts,
-  type MailboxView,
-} from "@/mocks";
+import { getEmailDataSource } from "@/lib/email-data-source";
+import { useMailUi } from "@/lib/email-data-source/mail-ui-context";
+import { mailboxDisplayCounts, type MailboxView } from "@/mocks";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,7 +37,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useWorkspace } from "@/state/workspace";
-import type { Thread } from "@/types/domain";
+import type { Participant, Thread } from "@/types/domain";
+
+const READ_ONLY_HINT = "פעולה זו אינה זמינה במצב קריאה בלבד";
 
 const SMART_VIEWS: {
   id: MailboxView;
@@ -91,6 +88,24 @@ function isEditableTarget(target: EventTarget | null) {
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
 }
 
+function syncBannerText(
+  status: NonNullable<ReturnType<typeof useMailUi>["account"]>["syncStatus"],
+  errorMessageSafe: string | null,
+) {
+  switch (status) {
+    case "pending":
+      return "סנכרון הדואר ממתין להתחלה.";
+    case "syncing":
+      return "מסנכרן את תיבת הדואר…";
+    case "needs_reconnect":
+      return "נדרש חיבור מחדש לחשבון הדואר.";
+    case "error":
+      return errorMessageSafe?.trim() || "סנכרון הדואר נכשל.";
+    default:
+      return null;
+  }
+}
+
 function ThreadAvatar({
   name,
   avatarUrl,
@@ -116,10 +131,33 @@ function ThreadAvatar({
   );
 }
 
+function ThreadListSkeleton() {
+  return (
+    <div className="space-y-0" aria-busy="true" aria-label="טוען שיחות">
+      {Array.from({ length: 8 }).map((_, index) => (
+        <div
+          key={index}
+          className="flex gap-3 border-b border-[var(--border)] px-3 py-3"
+        >
+          <div className="size-9 shrink-0 animate-pulse rounded-full bg-[var(--surface-subtle)]" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="h-3.5 w-1/2 animate-pulse rounded bg-[var(--surface-subtle)]" />
+            <div className="h-3 w-3/4 animate-pulse rounded bg-[var(--surface-subtle)]" />
+            <div className="h-3 w-full animate-pulse rounded bg-[var(--surface-subtle)]" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ThreadRow({
   thread,
   selected,
   starred,
+  hasFiles,
+  draft,
+  writeActionsDisabled,
   onSelect,
   onStar,
   onArchive,
@@ -127,15 +165,42 @@ function ThreadRow({
   thread: Thread;
   selected: boolean;
   starred: boolean;
+  hasFiles: boolean;
+  draft: boolean;
+  writeActionsDisabled: boolean;
   onSelect: () => void;
   onStar: (e: React.MouseEvent) => void;
   onArchive: (e: React.MouseEvent) => void;
 }) {
-  const person = getThreadPrimaryParticipant(thread);
+  const ds = getEmailDataSource();
+  const mail = useMailUi();
+  const [person, setPerson] = React.useState<Participant | undefined>(() => {
+    for (const id of thread.participantIds) {
+      if (id === mail.currentUserId) continue;
+      const cached = mail.getParticipant(id);
+      if (cached) return cached;
+    }
+    const first = thread.participantIds[0];
+    return first ? mail.getParticipant(first) : undefined;
+  });
+
+  const setParticipants = mail.setParticipants;
+  React.useEffect(() => {
+    let cancelled = false;
+    void ds.getThreadPrimaryParticipant(thread).then((resolved) => {
+      if (cancelled || !resolved) return;
+      setPerson(resolved);
+      setParticipants([resolved]);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Resolve once per thread identity; participant payload may arrive async from DS cache.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ds, setParticipants, thread.id]);
+
   const name = person?.name ?? "ללא שם";
   const unread = thread.unread;
-  const draft = isDraftThread(thread.id);
-  const hasFiles = getThreadAttachmentCount(thread.id) > 0;
   const sendFailed = Boolean(thread.sendFailed);
 
   return (
@@ -208,8 +273,9 @@ function ThreadRow({
                   <button
                     type="button"
                     aria-label={starred ? "הסר ממועדפים" : "הוסף למועדפים"}
+                    disabled={writeActionsDisabled}
                     onClick={onStar}
-                    className="inline-flex size-7 items-center justify-center rounded-[8px] text-[#9AA0A6] hover:bg-white hover:text-[#212529]"
+                    className="inline-flex size-7 items-center justify-center rounded-[8px] text-[#9AA0A6] hover:bg-white hover:text-[#212529] disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <Star
                       className="size-4"
@@ -219,7 +285,11 @@ function ThreadRow({
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {starred ? "הסר ממועדפים" : "הוסף למועדפים"}
+                  {writeActionsDisabled
+                    ? READ_ONLY_HINT
+                    : starred
+                      ? "הסר ממועדפים"
+                      : "הוסף למועדפים"}
                 </TooltipContent>
               </Tooltip>
               <Tooltip>
@@ -227,13 +297,16 @@ function ThreadRow({
                   <button
                     type="button"
                     aria-label="העבר לארכיון"
+                    disabled={writeActionsDisabled}
                     onClick={onArchive}
-                    className="inline-flex size-7 items-center justify-center rounded-[8px] text-[#9AA0A6] hover:bg-white hover:text-[#212529]"
+                    className="inline-flex size-7 items-center justify-center rounded-[8px] text-[#9AA0A6] hover:bg-white hover:text-[#212529] disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <Archive className="size-4" strokeWidth={1.75} />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent>העבר לארכיון</TooltipContent>
+                <TooltipContent>
+                  {writeActionsDisabled ? READ_ONLY_HINT : "העבר לארכיון"}
+                </TooltipContent>
               </Tooltip>
             </div>
           </div>
@@ -279,19 +352,126 @@ function ThreadRow({
 export function ThreadSidebar({ activeThreadId }: { activeThreadId: string | null }) {
   const router = useRouter();
   const { state, dispatch } = useWorkspace();
-  const [query, setQuery] = React.useState("");
-  const searchRef = React.useRef<HTMLInputElement>(null);
+  const mail = useMailUi();
+  const ds = getEmailDataSource();
+  const { writeActionsDisabled, account } = mail;
 
-  const list = getThreadsByInboxFilter(state.mailboxView, {
-    starredThreadIds: state.starredThreadIds,
-    archivedThreadIds: state.archivedThreadIds,
-    deletedThreadIds: state.deletedThreadIds,
-    smartFilter: "all",
-    query,
-    includeComposeDraft: Boolean(state.composer.composeNew),
-  }).map((t) =>
-    resolveThread(t, state.threadOverrides as Record<string, Partial<Thread>>),
+  const [query, setQuery] = React.useState("");
+  const [debouncedQuery, setDebouncedQuery] = React.useState("");
+  const [threads, setThreads] = React.useState<Thread[]>([]);
+  const [nextCursor, setNextCursor] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [loadingMore, setLoadingMore] = React.useState(false);
+  const [loadError, setLoadError] = React.useState(false);
+  const [attachmentCounts, setAttachmentCounts] = React.useState(
+    () => new Map<string, number>(),
   );
+  const [draftThreadIds, setDraftThreadIds] = React.useState(
+    () => new Set<string>(),
+  );
+  const searchRef = React.useRef<HTMLInputElement>(null);
+  const requestIdRef = React.useRef(0);
+
+  React.useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(query), 200);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  const enrichThreads = React.useCallback(
+    async (pageThreads: Thread[]) => {
+      const counts = await Promise.all(
+        pageThreads.map(async (thread) => {
+          const count = await ds.getThreadAttachmentCount(thread.id);
+          const draft = await ds.isDraftThread(thread.id);
+          return { id: thread.id, count, draft };
+        }),
+      );
+      setAttachmentCounts((prev) => {
+        const next = new Map(prev);
+        for (const row of counts) next.set(row.id, row.count);
+        return next;
+      });
+      setDraftThreadIds((prev) => {
+        const next = new Set(prev);
+        for (const row of counts) {
+          if (row.draft) next.add(row.id);
+          else next.delete(row.id);
+        }
+        return next;
+      });
+    },
+    [ds],
+  );
+
+  const loadThreads = React.useCallback(
+    async (cursor?: string | null, append = false) => {
+      const requestId = ++requestIdRef.current;
+      if (append) setLoadingMore(true);
+      else {
+        setLoading(true);
+        setLoadError(false);
+      }
+      try {
+        const page = await ds.listThreads(state.mailboxView, {
+          starredThreadIds: state.starredThreadIds,
+          archivedThreadIds: state.archivedThreadIds,
+          deletedThreadIds: state.deletedThreadIds,
+          smartFilter: "all",
+          query: debouncedQuery,
+          includeComposeDraft: Boolean(state.composer.composeNew),
+          limit: 40,
+          cursor: cursor ?? undefined,
+        });
+        if (requestId !== requestIdRef.current) return;
+
+        setThreads((prev) =>
+          append
+            ? [
+                ...prev,
+                ...page.threads.filter(
+                  (thread) => !prev.some((existing) => existing.id === thread.id),
+                ),
+              ]
+            : page.threads,
+        );
+        setNextCursor(page.nextCursor);
+        void enrichThreads(page.threads);
+      } catch {
+        if (requestId !== requestIdRef.current) return;
+        if (!append) {
+          setThreads([]);
+          setNextCursor(null);
+          setLoadError(true);
+        }
+      } finally {
+        if (requestId === requestIdRef.current) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
+      }
+    },
+    [
+      debouncedQuery,
+      ds,
+      enrichThreads,
+      state.archivedThreadIds,
+      state.composer.composeNew,
+      state.deletedThreadIds,
+      state.mailboxView,
+      state.starredThreadIds,
+    ],
+  );
+
+  React.useEffect(() => {
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      void loadThreads(null, false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [loadThreads]);
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -311,13 +491,21 @@ export function ThreadSidebar({ activeThreadId }: { activeThreadId: string | nul
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [router]);
 
+  const list = threads.map((t) =>
+    resolveThread(t, state.threadOverrides as Record<string, Partial<Thread>>),
+  );
+
   const count = mailboxCount(state.mailboxView);
   const current = mailboxOption(state.mailboxView);
   const TitleIcon = current.icon;
   const title = current.label;
   const searching = query.trim().length > 0;
+  const banner =
+    account &&
+    syncBannerText(account.syncStatus, account.errorMessageSafe);
 
   const composeNew = () => {
+    if (writeActionsDisabled) return;
     dispatch({ type: "START_COMPOSE_NEW" });
     dispatch({ type: "SAVE_DRAFT" });
     router.push("/inbox/compose");
@@ -401,14 +589,22 @@ export function ThreadSidebar({ activeThreadId }: { activeThreadId: string | nul
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <button
-            type="button"
-            onClick={composeNew}
-            className="inline-flex h-[34px] shrink-0 items-center gap-1.5 rounded-[var(--radius-pill)] bg-[#3F4548] px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-[#2F3437]"
-          >
-            <SquarePen className="size-4" strokeWidth={1.75} />
-            מייל חדש
-          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                disabled={writeActionsDisabled}
+                onClick={composeNew}
+                className="inline-flex h-[34px] shrink-0 items-center gap-1.5 rounded-[var(--radius-pill)] bg-[#3F4548] px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-[#2F3437] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <SquarePen className="size-4" strokeWidth={1.75} />
+                מייל חדש
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {writeActionsDisabled ? READ_ONLY_HINT : "מייל חדש"}
+            </TooltipContent>
+          </Tooltip>
         </div>
 
         <label className="relative block">
@@ -433,6 +629,12 @@ export function ThreadSidebar({ activeThreadId }: { activeThreadId: string | nul
             className="h-9 w-full rounded-[10px] border border-[var(--border)] bg-white pe-3 ps-10 text-[13.5px] outline-none placeholder:text-[var(--text-muted)] focus:border-[var(--border-strong)]"
           />
         </label>
+
+        {banner ? (
+          <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-subtle)] px-2.5 py-1.5 text-[12px] text-[var(--text-secondary)]">
+            {banner}
+          </div>
+        ) : null}
       </div>
 
       <div
@@ -440,63 +642,95 @@ export function ThreadSidebar({ activeThreadId }: { activeThreadId: string | nul
         role="listbox"
         aria-label="רשימת שיחות"
       >
-        {list.length === 0 ? (
+        {loading ? (
+          <ThreadListSkeleton />
+        ) : loadError ? (
+          <div className="px-4 py-12 text-center text-[14px] text-[#6C757D]">
+            <p>לא ניתן לטעון את השיחות.</p>
+            <button
+              type="button"
+              onClick={() => void loadThreads(null, false)}
+              className="mt-3 rounded-[10px] border border-[var(--border)] px-3 py-1.5 text-[13px]"
+            >
+              נסה שוב
+            </button>
+          </div>
+        ) : list.length === 0 ? (
           <div className="px-4 py-12 text-center text-[14px] text-[#6C757D]">
             {searching
               ? "לא נמצאו מיילים שתואמים לסינון"
               : "אין כאן שיחות כרגע"}
           </div>
         ) : (
-          list.map((thread) => {
-            const starred = state.starredThreadIds.includes(thread.id);
-            return (
-              <ThreadRow
-                key={thread.id}
-                thread={thread}
-                selected={thread.id === activeThreadId}
-                starred={starred}
-                onSelect={() => {
-                  dispatch({ type: "CLEAR_COMPOSE_NEW" });
-                  if (thread.unread) {
-                    dispatch({
-                      type: "MARK_THREAD_READ",
-                      threadId: thread.id,
+          <>
+            {list.map((thread) => {
+              const starred = state.starredThreadIds.includes(thread.id);
+              return (
+                <ThreadRow
+                  key={thread.id}
+                  thread={thread}
+                  selected={thread.id === activeThreadId}
+                  starred={starred}
+                  hasFiles={(attachmentCounts.get(thread.id) ?? 0) > 0}
+                  draft={draftThreadIds.has(thread.id)}
+                  writeActionsDisabled={writeActionsDisabled}
+                  onSelect={() => {
+                    dispatch({ type: "CLEAR_COMPOSE_NEW" });
+                    if (thread.unread && !writeActionsDisabled) {
+                      dispatch({
+                        type: "MARK_THREAD_READ",
+                        threadId: thread.id,
+                      });
+                    }
+                  }}
+                  onStar={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (writeActionsDisabled) return;
+                    dispatch({ type: "TOGGLE_STAR_THREAD", threadId: thread.id });
+                    toast(starred ? "הוסר מהמועדפים" : "השיחה נוספה למועדפים", {
+                      action: {
+                        label: "ביטול",
+                        onClick: () =>
+                          dispatch({
+                            type: "TOGGLE_STAR_THREAD",
+                            threadId: thread.id,
+                          }),
+                      },
                     });
-                  }
-                }}
-                onStar={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  dispatch({ type: "TOGGLE_STAR_THREAD", threadId: thread.id });
-                  toast(starred ? "הוסר מהמועדפים" : "השיחה נוספה למועדפים", {
-                    action: {
-                      label: "ביטול",
-                      onClick: () =>
-                        dispatch({
-                          type: "TOGGLE_STAR_THREAD",
-                          threadId: thread.id,
-                        }),
-                    },
-                  });
-                }}
-                onArchive={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  dispatch({ type: "ARCHIVE_THREAD", threadId: thread.id });
-                  toast("השיחה הועברה לארכיון", {
-                    action: {
-                      label: "ביטול",
-                      onClick: () =>
-                        dispatch({
-                          type: "UNARCHIVE_THREAD",
-                          threadId: thread.id,
-                        }),
-                    },
-                  });
-                }}
-              />
-            );
-          })
+                  }}
+                  onArchive={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (writeActionsDisabled) return;
+                    dispatch({ type: "ARCHIVE_THREAD", threadId: thread.id });
+                    toast("השיחה הועברה לארכיון", {
+                      action: {
+                        label: "ביטול",
+                        onClick: () =>
+                          dispatch({
+                            type: "UNARCHIVE_THREAD",
+                            threadId: thread.id,
+                          }),
+                      },
+                    });
+                  }}
+                />
+              );
+            })}
+            {nextCursor ? (
+              <div className="px-3 py-3">
+                <button
+                  type="button"
+                  disabled={loadingMore}
+                  onClick={() => void loadThreads(nextCursor, true)}
+                  className="w-full rounded-[10px] border border-[var(--border)] px-3 py-2 text-[13px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
+                >
+                  {loadingMore ? "טוען…" : "טען עוד"}
+                </button>
+              </div>
+            ) : null}
+          </>
         )}
       </div>
     </aside>

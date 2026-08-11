@@ -130,6 +130,11 @@ export type Message = {
   body: string;
   /** Structured body blocks; when present, rendered instead of plain `body` */
   content?: MessageContentBlock[];
+  /**
+   * API mode: already-sanitized HTML (CID rewritten to proxy; remote images blocked).
+   * Never raw provider HTML. When set, MessageBody prefers this over plain blocks.
+   */
+  sanitizedHtml?: string | null;
   isOutbound: boolean;
   /** Message id this message is a reply to (full source mail for “כתגובה למייל זה”) */
   repliedToMessageId?: string;

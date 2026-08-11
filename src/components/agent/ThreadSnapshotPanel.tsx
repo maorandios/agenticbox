@@ -13,7 +13,8 @@ import {
   MoveLeft,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { CURRENT_USER_ID, getThreadSnapshot } from "@/mocks";
+import { getEmailDataSource } from "@/lib/email-data-source";
+import { useMailUi } from "@/lib/email-data-source/mail-ui-context";
 import { NeedsYouCard } from "@/components/agent/NeedsYouCard";
 import { ThreadAiPanel } from "@/components/agent/ThreadAiPanel";
 import {
@@ -22,14 +23,14 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useWorkspace } from "@/state/workspace";
-import type { ThreadSnapshotItem } from "@/types/domain";
+import type { ThreadSnapshot, ThreadSnapshotItem } from "@/types/domain";
 
 const PREVIEW_LIMIT = 3;
 
-function sortTasks(items: ThreadSnapshotItem[]) {
+function sortTasks(items: ThreadSnapshotItem[], currentUserId: string) {
   return [...items].sort((a, b) => {
-    const aMine = a.assigneeId === CURRENT_USER_ID ? 0 : 1;
-    const bMine = b.assigneeId === CURRENT_USER_ID ? 0 : 1;
+    const aMine = a.assigneeId === currentUserId ? 0 : 1;
+    const bMine = b.assigneeId === currentUserId ? 0 : 1;
     return aMine - bMine;
   });
 }
@@ -111,6 +112,7 @@ function SnapshotSection({
   icon,
   items,
   onSelect,
+  currentUserId,
   prioritizeCurrentUser = false,
   showDueInline = false,
 }: {
@@ -118,11 +120,14 @@ function SnapshotSection({
   icon: LucideIcon;
   items: ThreadSnapshotItem[];
   onSelect: (messageId: string) => void;
+  currentUserId: string;
   prioritizeCurrentUser?: boolean;
   showDueInline?: boolean;
 }) {
   const [expanded, setExpanded] = React.useState(false);
-  const ordered = prioritizeCurrentUser ? sortTasks(items) : items;
+  const ordered = prioritizeCurrentUser
+    ? sortTasks(items, currentUserId)
+    : items;
   const preview = ordered.slice(0, PREVIEW_LIMIT);
   const rest = ordered.slice(PREVIEW_LIMIT);
 
@@ -189,8 +194,15 @@ function SnapshotSection({
   );
 }
 
-export function ThreadSnapshotPanel({ threadId }: { threadId: string }) {
-  const snapshot = getThreadSnapshot(threadId);
+function SnapshotShell({
+  threadId,
+  ariaLabel,
+  children,
+}: {
+  threadId: string;
+  ariaLabel: string;
+  children: React.ReactNode;
+}) {
   const { state, dispatch } = useWorkspace();
   const insightsRef = React.useRef<HTMLDivElement>(null);
   const aiOpen = state.leftPanelMode === "thread-ai";
@@ -207,14 +219,10 @@ export function ThreadSnapshotPanel({ threadId }: { threadId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aiOpen, threadId]);
 
-  const showSource = (messageId: string) => {
-    dispatch({ type: "HIGHLIGHT_MESSAGE", messageId });
-  };
-
   return (
     <aside
       className="snapshot-panel relative flex h-full w-[var(--snapshot-width)] shrink-0 flex-col overflow-hidden border-r border-[var(--border)] bg-white"
-      aria-label={aiOpen ? "מה תרצו לדעת" : "תמונת השרשור"}
+      aria-label={ariaLabel}
     >
       <div
         className={cn(
@@ -235,40 +243,7 @@ export function ThreadSnapshotPanel({ threadId }: { threadId: string }) {
             });
           }}
         >
-          {snapshot.primary.mode === "needs_you" ? (
-            <NeedsYouCard
-              threadId={threadId}
-              actions={snapshot.primary.actions}
-              draftReply={snapshot.primary.draftReply}
-            />
-          ) : null}
-
-          <SnapshotSection
-            title="שינויים אחרונים"
-            icon={History}
-            items={snapshot.recentChanges}
-            onSelect={showSource}
-          />
-          <SnapshotSection
-            title="משימות פתוחות"
-            icon={ListChecks}
-            items={snapshot.openTasks}
-            onSelect={showSource}
-            prioritizeCurrentUser
-            showDueInline
-          />
-          <SnapshotSection
-            title="החלטות שהתקבלו"
-            icon={BadgeCheck}
-            items={snapshot.decisions}
-            onSelect={showSource}
-          />
-          <SnapshotSection
-            title="ממתינים"
-            icon={Clock3}
-            items={snapshot.waitingOn}
-            onSelect={showSource}
-          />
+          {children}
         </div>
       </div>
 
@@ -284,5 +259,92 @@ export function ThreadSnapshotPanel({ threadId }: { threadId: string }) {
         <ThreadAiPanel threadId={threadId} />
       </div>
     </aside>
+  );
+}
+
+export function ThreadSnapshotPanel({ threadId }: { threadId: string }) {
+  const ds = getEmailDataSource();
+  const mail = useMailUi();
+  const { dispatch } = useWorkspace();
+  const [snapshot, setSnapshot] = React.useState<ThreadSnapshot | null>(null);
+
+  React.useEffect(() => {
+    if (!ds.supportsMockAi()) {
+      return;
+    }
+    let cancelled = false;
+    void ds.getThreadSnapshot(threadId).then((value) => {
+      if (!cancelled) setSnapshot(value);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [ds, threadId]);
+
+  const showSource = (messageId: string) => {
+    dispatch({ type: "HIGHLIGHT_MESSAGE", messageId });
+  };
+
+  if (!ds.supportsMockAi()) {
+    return (
+      <SnapshotShell threadId={threadId} ariaLabel="תמונת השרשור">
+        <div className="rounded-[14px] border border-[var(--border)] bg-white p-[14px]">
+          <p className="text-[12.5px] leading-[1.5] text-[var(--text-secondary)]">
+            תובנות הסוכן אינן זמינות במצב קריאה בלבד.
+          </p>
+        </div>
+      </SnapshotShell>
+    );
+  }
+
+  if (!snapshot) {
+    return (
+      <SnapshotShell threadId={threadId} ariaLabel="תמונת השרשור">
+        <div className="h-24 animate-pulse rounded-[14px] bg-[var(--surface-subtle)]" />
+      </SnapshotShell>
+    );
+  }
+
+  return (
+    <SnapshotShell threadId={threadId} ariaLabel="תמונת השרשור">
+      {snapshot.primary.mode === "needs_you" ? (
+        <NeedsYouCard
+          threadId={threadId}
+          actions={snapshot.primary.actions}
+          draftReply={snapshot.primary.draftReply}
+        />
+      ) : null}
+
+      <SnapshotSection
+        title="שינויים אחרונים"
+        icon={History}
+        items={snapshot.recentChanges}
+        onSelect={showSource}
+        currentUserId={mail.currentUserId}
+      />
+      <SnapshotSection
+        title="משימות פתוחות"
+        icon={ListChecks}
+        items={snapshot.openTasks}
+        onSelect={showSource}
+        currentUserId={mail.currentUserId}
+        prioritizeCurrentUser
+        showDueInline
+      />
+      <SnapshotSection
+        title="החלטות שהתקבלו"
+        icon={BadgeCheck}
+        items={snapshot.decisions}
+        onSelect={showSource}
+        currentUserId={mail.currentUserId}
+      />
+      <SnapshotSection
+        title="ממתינים"
+        icon={Clock3}
+        items={snapshot.waitingOn}
+        onSelect={showSource}
+        currentUserId={mail.currentUserId}
+      />
+    </SnapshotShell>
   );
 }

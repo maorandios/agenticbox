@@ -24,12 +24,14 @@ import {
 } from "@/lib/format";
 import { getDisplayInitials } from "@/lib/initials";
 import { sleep } from "@/lib/sleep";
+import { getEmailDataSource } from "@/lib/email-data-source";
+import { useMailUi } from "@/lib/email-data-source/mail-ui-context";
 import {
   CURRENT_USER_ID,
-  getBubbleAttachments,
-  getMessagesForThread,
-  getParticipant,
-  getThread,
+  getBubbleAttachments as mockBubbleAttachments,
+  getMessagesForThread as mockMessagesForThread,
+  getParticipant as mockGetParticipant,
+  getThread as mockGetThread,
   resolveRepliedToMessage,
 } from "@/mocks";
 import { AttachmentTypeIcon } from "@/components/conversation/AttachmentTypeIcon";
@@ -51,6 +53,7 @@ import type {
   Message,
   MessageParagraphBlock,
   Participant,
+  Thread,
 } from "@/types/domain";
 
 async function copyText(value: string, success: string) {
@@ -154,7 +157,7 @@ function ReplyToBlock({
   dark: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
-  const sourceSender = getParticipant(source.fromId);
+  const sourceSender = mockGetParticipant(source.fromId);
   const sourceBody = plainMessageBody(source);
   const stamp = formatQuotedMessageStamp(source.sentAt);
   const summaryLabel = sourceSender
@@ -243,10 +246,25 @@ function AttachmentRow({
   file: Attachment;
   dark: boolean;
 }) {
+  const { writeActionsDisabled } = useMailUi();
   const typeLabel = getAttachmentTypeLabel(file);
-  const openPreview = () => toast("תצוגה מקדימה מדומה");
+  const openPreview = () => {
+    if (file.src?.startsWith("/api/mail/attachments/")) {
+      window.open(file.src, "_blank", "noopener,noreferrer");
+      return;
+    }
+    toast("תצוגה מקדימה מדומה");
+  };
+  const download = () => {
+    if (file.src?.startsWith("/api/mail/attachments/")) {
+      window.open(file.src, "_blank", "noopener,noreferrer");
+      return;
+    }
+    toast(`הורדה מדומה — ${file.fileName}`);
+  };
   const metaClass = dark ? "text-white/55" : "text-[var(--text-muted)]";
   const iconClass = dark ? "text-white/80" : "text-[var(--text-primary)]";
+  void writeActionsDisabled;
 
   return (
     <div
@@ -313,7 +331,7 @@ function AttachmentRow({
               aria-label="הורדה"
               onClick={(e) => {
                 e.stopPropagation();
-                toast(`הורדה מדומה — ${file.fileName}`);
+                download();
               }}
               className={cn(
                 "inline-flex size-7 items-center justify-center rounded-[8px]",
@@ -448,12 +466,16 @@ function MessageToolbar({
   dark: boolean;
 }) {
   const { dispatch } = useWorkspace();
+  const { writeActionsDisabled } = useMailUi();
+  const disabledHint = "פעולה זו אינה זמינה במצב קריאה בלבד";
 
   const actions = [
     {
       label: "שאל על ההודעה",
       icon: Sparkles,
+      disabled: writeActionsDisabled,
       onClick: () => {
+        if (writeActionsDisabled) return;
         dispatch({
           type: "OPEN_THREAD_AI",
           threadId: message.threadId,
@@ -465,34 +487,43 @@ function MessageToolbar({
     {
       label: "השב",
       icon: Reply,
+      disabled: writeActionsDisabled,
       onClick: () => {
+        if (writeActionsDisabled) return;
         dispatch({ type: "FOCUS_COMPOSER", mode: "reply" });
       },
     },
     {
       label: "השב לכולם",
       icon: ReplyAll,
+      disabled: writeActionsDisabled,
       onClick: () => {
+        if (writeActionsDisabled) return;
         dispatch({ type: "FOCUS_COMPOSER", mode: "replyAll" });
       },
     },
     {
       label: "העבר",
       icon: Forward,
+      disabled: writeActionsDisabled,
       onClick: () => {
+        if (writeActionsDisabled) return;
         dispatch({ type: "FOCUS_COMPOSER", mode: "forward" });
       },
     },
     {
       label: "העתק תוכן",
       icon: Copy,
+      disabled: false,
       onClick: () => copyText(message.body, "תוכן ההודעה הועתק"),
     },
     {
       label: "העבר הודעה לאשפה",
       icon: Trash2,
       destructive: true as const,
+      disabled: writeActionsDisabled,
       onClick: () => {
+        if (writeActionsDisabled) return;
         dispatch({ type: "DELETE_MESSAGE", messageId: message.id });
         toast("ההודעה הועברה לאשפה", {
           action: {
@@ -524,9 +555,11 @@ function MessageToolbar({
             <button
               type="button"
               aria-label={item.label}
+              disabled={Boolean(item.disabled)}
               onClick={item.onClick}
               className={cn(
                 "inline-flex size-7 shrink-0 items-center justify-center rounded-[8px] transition-all duration-[120ms] ease-out",
+                item.disabled && "cursor-not-allowed opacity-40",
                 dark
                   ? "text-white hover:bg-white/15"
                   : "text-[var(--text-secondary)] opacity-80 hover:bg-white hover:opacity-100 hover:text-[var(--text-primary)]",
@@ -537,7 +570,9 @@ function MessageToolbar({
               <item.icon className="size-4" strokeWidth={1.75} />
             </button>
           </TooltipTrigger>
-          <TooltipContent>{item.label}</TooltipContent>
+          <TooltipContent>
+            {item.disabled ? disabledHint : item.label}
+          </TooltipContent>
         </Tooltip>
       ))}
     </div>
@@ -551,19 +586,26 @@ function MessageBubble({
   message: Message;
   highlighted: boolean;
 }) {
+  const mail = useMailUi();
   const [detailsOpen, setDetailsOpen] = React.useState(false);
   const [signatureOpen, setSignatureOpen] = React.useState(false);
-  const sender = getParticipant(message.fromId);
+  const sender = mail.getParticipant(message.fromId) ?? mockGetParticipant(message.fromId);
   const signature = message.signatureSnapshot;
   const toPeople = message.toIds
-    .map((id) => getParticipant(id))
+    .map((id) => mail.getParticipant(id) ?? mockGetParticipant(id))
     .filter((p): p is Participant => Boolean(p));
   const ccPeople = (message.ccIds ?? [])
-    .map((id) => getParticipant(id))
+    .map((id) => mail.getParticipant(id) ?? mockGetParticipant(id))
     .filter((p): p is Participant => Boolean(p));
-  const replyTo = message.replyToId ? getParticipant(message.replyToId) : null;
-  const attachments = getBubbleAttachments(message);
-  const repliedTo = resolveRepliedToMessage(message);
+  const replyTo = message.replyToId
+    ? mail.getParticipant(message.replyToId) ?? mockGetParticipant(message.replyToId)
+    : null;
+  const attachments =
+    mail.mode === "api"
+      ? mail.getBubbleAttachments(message.id, message.attachmentIds)
+      : mockBubbleAttachments(message);
+  const repliedTo =
+    mail.mode === "api" ? null : resolveRepliedToMessage(message);
   const mine = message.isOutbound;
   const dark = !mine;
   const compactStamp = formatCompactMessageStamp(message.sentAt);
@@ -779,19 +821,74 @@ type PendingOutbound = Message & {
 };
 
 export function ConversationPanel({ threadId }: { threadId: string }) {
-  const thread = getThread(threadId);
+  const ds = getEmailDataSource();
+  const mail = useMailUi();
   const { state, dispatch } = useWorkspace();
+  const [thread, setThread] = React.useState<Thread | null>(() =>
+    ds.mode === "mock" ? mockGetThread(threadId) ?? null : null,
+  );
+  const [baseMessages, setBaseMessages] = React.useState<Message[]>(() =>
+    ds.mode === "mock" ? mockMessagesForThread(threadId) : [],
+  );
+  const [loadState, setLoadState] = React.useState<"loading" | "ready" | "error" | "missing">(
+    ds.mode === "mock" ? (mockGetThread(threadId) ? "ready" : "missing") : "loading",
+  );
   const [pendingOutbound, setPendingOutbound] = React.useState<PendingOutbound[]>(
     [],
   );
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const prevThreadIdRef = React.useRef(threadId);
 
-  const baseMessages = getMessagesForThread(threadId).filter(
-    (message) => !state.deletedMessageIds.includes(message.id),
-  );
+  const reload = React.useCallback(async () => {
+    setLoadState("loading");
+    try {
+      const nextThread = await ds.getThread(threadId);
+      if (!nextThread) {
+        setThread(null);
+        setBaseMessages([]);
+        setLoadState("missing");
+        return;
+      }
+      const nextMessages = await ds.getMessagesForThread(threadId);
+      if (ds.mode === "api") {
+        const res = await fetch(
+          `/api/mail/threads/${encodeURIComponent(threadId)}/messages`,
+          { cache: "no-store", credentials: "same-origin" },
+        );
+        if (res.ok) {
+          const body = (await res.json()) as {
+            participants?: Participant[];
+            attachments?: Attachment[];
+          };
+          mail.setParticipants(body.participants ?? []);
+          mail.setAttachments(body.attachments ?? []);
+        }
+      }
+      setThread(nextThread);
+      setBaseMessages(nextMessages);
+      setLoadState("ready");
+    } catch {
+      setLoadState("error");
+    }
+    // mail setters are stable; omit mail object to avoid reload loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ds, threadId]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      void reload();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reload]);
+
   const messages = [
-    ...baseMessages,
+    ...baseMessages.filter(
+      (message) => !state.deletedMessageIds.includes(message.id),
+    ),
     ...pendingOutbound.filter((m) => m.threadId === threadId),
   ].sort((a, b) => a.sentAt.localeCompare(b.sentAt));
 
@@ -831,7 +928,6 @@ export function ConversationPanel({ threadId }: { threadId: string }) {
       if (scrollRef.current) scrollRef.current.scrollTop = restore;
     });
     return () => window.cancelAnimationFrame(frame);
-    // Only re-run on thread change; scroll map read is intentional snapshot
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threadId, dispatch]);
 
@@ -847,7 +943,47 @@ export function ConversationPanel({ threadId }: { threadId: string }) {
     };
   }, [dispatch]);
 
-  if (!thread) return null;
+  if (loadState === "loading") {
+    return (
+      <div className="flex h-full flex-col bg-white p-8" aria-busy="true">
+        <div className="h-10 w-2/3 animate-pulse rounded-[12px] bg-[var(--surface-subtle)]" />
+        <div className="mt-6 space-y-4">
+          <div className="h-24 animate-pulse rounded-[16px] bg-[var(--surface-subtle)]" />
+          <div className="ms-auto h-24 w-[70%] animate-pulse rounded-[16px] bg-[var(--surface-subtle)]" />
+        </div>
+      </div>
+    );
+  }
+
+  if (loadState === "error") {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 bg-white p-8 text-center">
+        <p className="text-[14px] text-[var(--text-secondary)]">
+          לא ניתן לטעון את השיחה.
+        </p>
+        <button
+          type="button"
+          onClick={() => void reload()}
+          className="rounded-[12px] border border-[var(--border)] px-4 py-2 text-[13px]"
+        >
+          נסה שוב
+        </button>
+      </div>
+    );
+  }
+
+  if (loadState === "missing" || !thread) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 bg-white p-8 text-center">
+        <p className="text-[15px] font-medium text-[var(--text-primary)]">
+          השיחה לא נמצאה
+        </p>
+        <p className="text-[13px] text-[var(--text-secondary)]">
+          ייתכן שהשרשור נמחק או שאינו שייך לחשבון זה.
+        </p>
+      </div>
+    );
+  }
 
   const handleSend = async ({
     body,
@@ -859,12 +995,15 @@ export function ConversationPanel({ threadId }: { threadId: string }) {
     toIds: string[];
     ccIds: string[];
   }) => {
+    if (mail.writeActionsDisabled) return;
     const id = `pending-${Date.now()}`;
     const message: PendingOutbound = {
       id,
       threadId,
       fromId: CURRENT_USER_ID,
-      toIds: toIds.length ? toIds : thread.participantIds.filter((pid) => pid !== CURRENT_USER_ID),
+      toIds: toIds.length
+        ? toIds
+        : thread.participantIds.filter((pid) => pid !== CURRENT_USER_ID),
       ccIds,
       sentAt: new Date().toISOString(),
       body,

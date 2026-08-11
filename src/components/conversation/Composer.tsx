@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/cn";
 import { getDisplayInitials } from "@/lib/initials";
 import { sleep } from "@/lib/sleep";
+import { useMailUi } from "@/lib/email-data-source/mail-ui-context";
 import {
   CURRENT_USER_ID,
   getMessagesForThread,
@@ -43,6 +44,8 @@ import {
   type ComposerMode,
 } from "@/state/workspace";
 import type { Participant } from "@/types/domain";
+
+const READ_ONLY_HINT = "פעולה זו אינה זמינה במצב קריאה בלבד";
 
 type RecipientField = "to" | "cc" | "bcc";
 
@@ -613,7 +616,61 @@ function resolveRecipientsForMode(
   };
 }
 
+function ReadOnlyComposer() {
+  return (
+    <div className="sticky bottom-0 z-20 shrink-0 border-t border-[var(--border)] bg-white">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div
+            aria-disabled="true"
+            className="flex h-[58px] w-full cursor-not-allowed items-center gap-3 px-8 opacity-50"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 text-[12px]">
+                <Reply
+                  className="size-3.5 shrink-0 text-[var(--text-secondary)]"
+                  strokeWidth={1.75}
+                />
+                <span className="font-medium text-[var(--text-secondary)]">
+                  השב
+                </span>
+              </div>
+              <p className="mt-0.5 text-[12.5px] text-[var(--text-muted)]">
+                מצב קריאה בלבד — לא ניתן לשלוח הודעות
+              </p>
+            </div>
+            <span className="inline-flex h-9 items-center gap-2 rounded-[999px] bg-white px-4 text-[13px] font-medium text-[var(--text-muted)] ring-1 ring-[var(--border)]">
+              <Send className="size-[17px]" strokeWidth={1.75} />
+              שליחה
+            </span>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent>{READ_ONLY_HINT}</TooltipContent>
+      </Tooltip>
+    </div>
+  );
+}
+
 export function Composer({
+  threadId,
+  onSend,
+}: {
+  threadId: string;
+  onSend: (payload: {
+    body: string;
+    mode: ComposerMode;
+    toIds: string[];
+    ccIds: string[];
+  }) => void;
+}) {
+  const { writeActionsDisabled } = useMailUi();
+  if (writeActionsDisabled) {
+    return <ReadOnlyComposer />;
+  }
+  return <ComposerInteractive threadId={threadId} onSend={onSend} />;
+}
+
+function ComposerInteractive({
   threadId,
   onSend,
 }: {

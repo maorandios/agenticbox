@@ -14,7 +14,6 @@ import {
   Sparkles,
   Star,
   Trash2,
-  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/cn";
@@ -23,12 +22,9 @@ import {
   formatMessageDateTime,
   formatThreadOpenedLabel,
 } from "@/lib/format";
-import {
-  CURRENT_USER_ID,
-  getMessagesForThread,
-  getParticipant,
-  getThreadFileItems,
-} from "@/mocks";
+import { getEmailDataSource } from "@/lib/email-data-source";
+import { useMailUi } from "@/lib/email-data-source/mail-ui-context";
+import type { ThreadFileItem } from "@/mocks";
 import { AttachmentTypeIcon } from "@/components/conversation/AttachmentTypeIcon";
 import { IconButton } from "@/components/shared/IconButton";
 import {
@@ -49,9 +45,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useWorkspace } from "@/state/workspace";
-import type { Participant, Thread } from "@/types/domain";
+import type { Message, Participant, Thread } from "@/types/domain";
 
 const COLLAPSED_RECIPIENT_LIMIT = 2;
+const READ_ONLY_HINT = "פעולה זו אינה זמינה במצב קריאה בלבד";
 
 async function copyText(value: string, success: string) {
   try {
@@ -127,23 +124,71 @@ function RecipientRow({
 
 export function ThreadHeader({ thread }: { thread: Thread }) {
   const { state, dispatch } = useWorkspace();
-  const messages = getMessagesForThread(thread.id);
-  const threadAttachments = getThreadFileItems(thread.id);
+  const mail = useMailUi();
+  const ds = getEmailDataSource();
+  const writeActionsDisabled = mail.writeActionsDisabled;
+
+  const [messages, setMessages] = React.useState<Message[]>([]);
+  const [threadAttachments, setThreadAttachments] = React.useState<
+    ThreadFileItem[]
+  >([]);
   const [recipientsExpanded, setRecipientsExpanded] = React.useState(false);
   const [filesOpen, setFilesOpen] = React.useState(false);
   const askOpen = state.leftPanelMode === "thread-ai";
 
-  React.useEffect(() => {
+  const [panelEpoch, setPanelEpoch] = React.useState(thread.id);
+  if (panelEpoch !== thread.id) {
+    setPanelEpoch(thread.id);
     setRecipientsExpanded(false);
     setFilesOpen(false);
-  }, [thread.id]);
+  }
 
+  React.useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [nextMessages, nextFiles] = await Promise.all([
+          ds.getMessagesForThread(thread.id),
+          ds.getThreadFileItems(thread.id),
+        ]);
+        if (cancelled) return;
+        setMessages(nextMessages);
+        setThreadAttachments(nextFiles);
+
+        const participantIds = new Set<string>();
+        for (const message of nextMessages) {
+          participantIds.add(message.fromId);
+          for (const id of message.toIds) participantIds.add(id);
+          for (const id of message.ccIds ?? []) participantIds.add(id);
+        }
+        for (const id of thread.participantIds) participantIds.add(id);
+
+        const resolved = (
+          await Promise.all(
+            [...participantIds].map((id) => ds.getParticipant(id)),
+          )
+        ).filter((p): p is Participant => Boolean(p));
+        if (!cancelled && resolved.length) mail.setParticipants(resolved);
+      } catch {
+        if (!cancelled) {
+          setMessages([]);
+          setThreadAttachments([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ds, thread.id]);
+
+  const currentUserId = mail.currentUserId;
   const actionPeople = thread.participantIds
-    .filter((id) => id !== CURRENT_USER_ID)
-    .map((id) => getParticipant(id))
+    .filter((id) => id !== currentUserId)
+    .map((id) => mail.getParticipant(id))
     .filter((p): p is Participant => Boolean(p));
 
-  const me = getParticipant(CURRENT_USER_ID);
+  const me = currentUserId ? mail.getParticipant(currentUserId) : undefined;
   const infoPeople = me ? [me] : [];
 
   const firstMessage = messages[0];
@@ -164,6 +209,7 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
   };
 
   const toggleStar = () => {
+    if (writeActionsDisabled) return;
     const wasStarred = starred;
     dispatch({ type: "TOGGLE_STAR_THREAD", threadId: thread.id });
     if (wasStarred) {
@@ -180,6 +226,7 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
   };
 
   const archiveThread = () => {
+    if (writeActionsDisabled) return;
     dispatch({ type: "ARCHIVE_THREAD", threadId: thread.id });
     toast("השיחה הועברה לארכיון", {
       action: {
@@ -188,6 +235,14 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
           dispatch({ type: "UNARCHIVE_THREAD", threadId: thread.id }),
       },
     });
+  };
+
+  const downloadFile = (file: ThreadFileItem) => {
+    if (file.src?.startsWith("/api/mail/attachments/")) {
+      window.open(file.src, "_blank", "noopener,noreferrer");
+      return;
+    }
+    toast(`הורדה מדומה — ${file.fileName}`);
   };
 
   return (
@@ -257,7 +312,9 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
                       <ul className="divide-y divide-[var(--border)]">
                         {sortedAttachments.map((file) => {
                           const msg = messages.find((m) => m.id === file.messageId);
-                          const sender = msg ? getParticipant(msg.fromId) : null;
+                          const sender = msg
+                            ? mail.getParticipant(msg.fromId)
+                            : null;
                           return (
                             <li
                               key={file.id}
@@ -302,9 +359,7 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
                                     </button>
                                     <button
                                       type="button"
-                                      onClick={() =>
-                                        toast(`הורדה מדומה — ${file.fileName}`)
-                                      }
+                                      onClick={() => downloadFile(file)}
                                       className="inline-flex items-center gap-1 text-[11.5px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                                     >
                                       <Download className="size-3" strokeWidth={1.75} />
@@ -333,7 +388,9 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
                 aria-label={askOpen ? "פאנל השאלות פתוח" : "שאל על השרשור"}
                 aria-expanded={askOpen}
                 aria-pressed={askOpen}
+                disabled={writeActionsDisabled}
                 onClick={() => {
+                  if (writeActionsDisabled) return;
                   if (askOpen) {
                     dispatch({ type: "CLOSE_THREAD_AI" });
                   } else {
@@ -344,7 +401,7 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
                   }
                 }}
                 className={cn(
-                  "inline-flex size-9 items-center justify-center rounded-[var(--radius-icon)] transition-colors",
+                  "inline-flex size-9 items-center justify-center rounded-[var(--radius-icon)] transition-colors disabled:cursor-not-allowed disabled:opacity-40",
                   askOpen
                     ? "bg-[var(--action-primary)] text-white"
                     : "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]",
@@ -354,7 +411,11 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
               </button>
             </TooltipTrigger>
             <TooltipContent>
-              {askOpen ? "פאנל השאלות פתוח" : "שאל על השרשור"}
+              {writeActionsDisabled
+                ? READ_ONLY_HINT
+                : askOpen
+                  ? "פאנל השאלות פתוח"
+                  : "שאל על השרשור"}
             </TooltipContent>
           </Tooltip>
 
@@ -364,9 +425,10 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
                 type="button"
                 aria-label={starred ? "הסר ממועדפים" : "הוסף למועדפים"}
                 aria-pressed={starred}
+                disabled={writeActionsDisabled}
                 onClick={toggleStar}
                 className={cn(
-                  "inline-flex size-9 items-center justify-center rounded-[var(--radius-icon)] transition-colors",
+                  "inline-flex size-9 items-center justify-center rounded-[var(--radius-icon)] transition-colors disabled:cursor-not-allowed disabled:opacity-40",
                   starred
                     ? "text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
                     : "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]",
@@ -379,13 +441,25 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
                 />
               </button>
             </TooltipTrigger>
-            <TooltipContent>{starred ? "הסר ממועדפים" : "הוסף למועדפים"}</TooltipContent>
+            <TooltipContent>
+              {writeActionsDisabled
+                ? READ_ONLY_HINT
+                : starred
+                  ? "הסר ממועדפים"
+                  : "הוסף למועדפים"}
+            </TooltipContent>
           </Tooltip>
 
           <IconButton
-            label={archived ? "כבר בארכיון" : "העבר לארכיון"}
+            label={
+              writeActionsDisabled
+                ? READ_ONLY_HINT
+                : archived
+                  ? "כבר בארכיון"
+                  : "העבר לארכיון"
+            }
             onClick={archiveThread}
-            disabled={archived}
+            disabled={writeActionsDisabled || archived}
             className="size-9"
           >
             <Archive className="size-[16px]" strokeWidth={1.75} />
@@ -408,21 +482,25 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
             </Tooltip>
             <DropdownMenuContent align="end" className="min-w-[240px]">
               <DropdownMenuItem
+                disabled={writeActionsDisabled}
                 onSelect={() => {
+                  if (writeActionsDisabled) return;
                   dispatch({ type: "MARK_THREAD_UNREAD", threadId: thread.id });
                   toast("סומן כלא נקרא");
                 }}
               >
                 <span className="inline-flex items-center gap-2">
                   <MailOpen className="size-4" strokeWidth={1.75} />
-                  סמן כלא נקרא
+                  {writeActionsDisabled ? READ_ONLY_HINT : "סמן כלא נקרא"}
                 </span>
               </DropdownMenuItem>
 
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-red-600 focus:bg-red-50 focus:text-red-700"
+                disabled={writeActionsDisabled}
                 onSelect={() => {
+                  if (writeActionsDisabled) return;
                   dispatch({ type: "DELETE_THREAD", threadId: thread.id });
                   toast("השיחה הועברה לאשפה", {
                     action: {
@@ -438,7 +516,9 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
               >
                 <span className="inline-flex items-center gap-2">
                   <Trash2 className="size-4" strokeWidth={1.75} />
-                  העבר את השיחה לאשפה
+                  {writeActionsDisabled
+                    ? READ_ONLY_HINT
+                    : "העבר את השיחה לאשפה"}
                 </span>
               </DropdownMenuItem>
             </DropdownMenuContent>

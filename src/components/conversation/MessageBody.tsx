@@ -205,8 +205,6 @@ function InlineImageView({
   onOpenLightbox: (image: MessageInlineImageBlock) => void;
 }) {
   const { state, dispatch } = useWorkspace();
-  const [loaded, setLoaded] = React.useState(false);
-  const [failed, setFailed] = React.useState(Boolean(image.forceError));
   const [retryToken, setRetryToken] = React.useState(0);
   const imgRef = React.useRef<HTMLImageElement | null>(null);
 
@@ -221,10 +219,19 @@ function InlineImageView({
         ? `/mock-mail/retry-fallback.jpg?r=${retryToken}`
         : image.src;
 
-  React.useEffect(() => {
+  const [loaded, setLoaded] = React.useState(false);
+  const [failed, setFailed] = React.useState(
+    Boolean(image.forceError) && retryToken === 0,
+  );
+  const [imageEpoch, setImageEpoch] = React.useState(
+    `${image.src}:${image.forceError}:${retryToken}`,
+  );
+  const epoch = `${image.src}:${image.forceError}:${retryToken}`;
+  if (imageEpoch !== epoch) {
+    setImageEpoch(epoch);
     setLoaded(false);
     setFailed(Boolean(image.forceError) && retryToken === 0);
-  }, [image.forceError, image.src, retryToken]);
+  }
 
   // Cached images often fire load before React attaches onLoad — sync from complete.
   React.useLayoutEffect(() => {
@@ -393,6 +400,63 @@ function ListBlock({
   );
 }
 
+function stripPlainSignature(text: string) {
+  const markers = [
+    /\n-- \n/,
+    /\n--\n/,
+    /\n_{5,}\n/,
+    /\nSent from my iPhone/i,
+    /\nSent from my Android/i,
+    /\nGet Outlook for /i,
+    /\nFrom:\s.+\nSent:\s/i,
+  ];
+  let cut = text.length;
+  for (const marker of markers) {
+    const match = marker.exec(text);
+    if (match?.index != null && match.index > 40 && match.index < cut) {
+      cut = match.index;
+    }
+  }
+  return text.slice(0, cut).trim();
+}
+
+function CleanPlainBody({ text, dark }: { text: string; dark: boolean }) {
+  const cleaned = stripPlainSignature(text);
+  const paragraphs = cleaned
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (!paragraphs.length) {
+    return (
+      <p
+        className={cn(
+          "text-[14px] leading-[1.55]",
+          dark ? "text-white/75" : "text-[var(--text-secondary)]",
+        )}
+      >
+        (אין תוכן טקסט)
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-3" dir="auto">
+      {paragraphs.map((paragraph, index) => (
+        <p
+          key={`p-${index}`}
+          className={cn(
+            "bidi-content whitespace-pre-wrap text-[14px] leading-[1.55]",
+            dark ? "text-white/92" : "text-[var(--text-primary)]",
+          )}
+          dir="auto"
+          style={{ unicodeBidi: "plaintext" }}
+        >
+          {paragraph}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 export function MessageBody({
   message,
   dark,
@@ -407,10 +471,115 @@ export function MessageBody({
   const [lightbox, setLightbox] = React.useState<MessageInlineImageBlock | null>(
     null,
   );
+  const [revealExternal, setRevealExternal] = React.useState(false);
+  const [htmlMessageId, setHtmlMessageId] = React.useState(message.id);
+  const [viewMode, setViewMode] = React.useState<"clean" | "formatted">("clean");
+  const [expanded, setExpanded] = React.useState(false);
+  if (htmlMessageId !== message.id) {
+    setHtmlMessageId(message.id);
+    setRevealExternal(false);
+    setViewMode("clean");
+    setExpanded(false);
+  }
+  const htmlRef = React.useRef<HTMLDivElement>(null);
+
+  const hasBlockedExternal = Boolean(
+    message.sanitizedHtml && /data-blocked-src=/i.test(message.sanitizedHtml),
+  );
+  const hasHtml = Boolean(message.sanitizedHtml?.trim());
+
+  React.useEffect(() => {
+    if (!revealExternal || !htmlRef.current) return;
+    htmlRef.current.querySelectorAll("img[data-blocked-src]").forEach((node) => {
+      const img = node as HTMLImageElement;
+      const blocked = img.getAttribute("data-blocked-src");
+      if (blocked) img.src = blocked;
+    });
+  }, [revealExternal, message.sanitizedHtml]);
+
+  if (hasHtml) {
+    return (
+      <div className="space-y-2" dir="auto">
+        <div className="flex flex-wrap items-center gap-2" dir="rtl">
+          <button
+            type="button"
+            onClick={() => setViewMode("clean")}
+            className={cn(
+              "rounded-[8px] px-2 py-1 text-[11.5px]",
+              viewMode === "clean"
+                ? dark
+                  ? "bg-white/15 text-white"
+                  : "bg-[var(--surface-selected)] text-[var(--text-primary)]"
+                : dark
+                  ? "text-white/65 hover:bg-white/10"
+                  : "text-[var(--text-secondary)] hover:bg-black/5",
+            )}
+          >
+            תצוגה נקייה
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("formatted")}
+            className={cn(
+              "rounded-[8px] px-2 py-1 text-[11.5px]",
+              viewMode === "formatted"
+                ? dark
+                  ? "bg-white/15 text-white"
+                  : "bg-[var(--surface-selected)] text-[var(--text-primary)]"
+                : dark
+                  ? "text-white/65 hover:bg-white/10"
+                  : "text-[var(--text-secondary)] hover:bg-black/5",
+            )}
+          >
+            עיצוב מקורי
+          </button>
+        </div>
+
+        {viewMode === "clean" ? (
+          <CleanPlainBody text={message.body} dark={dark} />
+        ) : (
+          <div className="space-y-2">
+            {hasBlockedExternal && !revealExternal ? (
+              <PrivacyBlockedPlaceholder
+                dark={dark}
+                onReveal={() => setRevealExternal(true)}
+                onAlwaysShow={() => setRevealExternal(true)}
+              />
+            ) : null}
+            <div
+              className={cn("mail-html-frame", !expanded && "is-collapsed")}
+            >
+              <div
+                ref={htmlRef}
+                className="mail-html bidi-content"
+                dir="auto"
+                // Sanitized on persist/read; CID → proxy; remote imgs blocked by default.
+                dangerouslySetInnerHTML={{ __html: message.sanitizedHtml ?? "" }}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setExpanded((value) => !value)}
+              className={cn(
+                "text-[12px] font-medium underline-offset-2 hover:underline",
+                dark ? "text-white/70" : "text-[var(--text-secondary)]",
+              )}
+            >
+              {expanded ? "הצג פחות" : "הצג הודעה מלאה"}
+            </button>
+          </div>
+        )}
+
+        {message.quotedText
+          ? renderQuoted({ text: message.quotedText, dark })
+          : null}
+      </div>
+    );
+  }
 
   return (
     <>
-      <div className="space-y-1">
+      <div className="space-y-1" dir="auto">
         {groups.map((group) => {
           if (group.kind === "image-grid") {
             return (
@@ -501,7 +670,13 @@ export function MessageBody({
                 </p>
                 <button
                   type="button"
-                  onClick={() => toast(`הורדה מדומה — ${lightbox.fileName}`)}
+                  onClick={() => {
+                    if (lightbox.src?.startsWith("/api/mail/attachments/")) {
+                      window.open(lightbox.src, "_blank", "noopener,noreferrer");
+                      return;
+                    }
+                    toast(`הורדה מדומה — ${lightbox.fileName}`);
+                  }}
                   className="inline-flex h-9 shrink-0 items-center gap-2 rounded-[var(--radius-pill)] border border-[var(--border)] bg-[var(--surface-subtle)] px-4 text-[13px] font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-hover)]"
                 >
                   <Download className="size-4" strokeWidth={1.75} />

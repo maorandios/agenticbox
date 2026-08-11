@@ -95,6 +95,68 @@
     unicode-bidi: plaintext;
   }
 
+  /* Real email HTML inside a light letter surface (keeps tables/colors readable). */
+  .mail-html {
+    color: #212529;
+    font-size: 14px;
+    line-height: 1.55;
+    overflow-x: auto;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .mail-html img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .mail-html table {
+    border-collapse: collapse;
+    max-width: 100%;
+  }
+
+  .mail-html td,
+  .mail-html th {
+    vertical-align: top;
+    padding: 0.35em 0.55em;
+  }
+
+  .mail-html a {
+    color: #1d4ed8;
+    text-decoration: underline;
+  }
+
+  .mail-html blockquote {
+    margin: 0.5em 0;
+    padding-inline-start: 0.75em;
+    border-inline-start: 3px solid #ced4da;
+    color: #6c757d;
+  }
+
+  .mail-html-frame {
+    background: #ffffff;
+    color: #212529;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    overflow: hidden;
+  }
+
+  .mail-html-frame.is-collapsed {
+    max-height: 280px;
+    position: relative;
+  }
+
+  .mail-html-frame.is-collapsed::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    height: 64px;
+    background: linear-gradient(to top, #ffffff, transparent);
+    pointer-events: none;
+  }
+
   .composer-editor:empty:before {
     content: attr(data-placeholder);
     color: var(--text-muted);
