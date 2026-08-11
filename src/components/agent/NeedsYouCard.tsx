@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/cn";
-import { CURRENT_USER_ID } from "@/mocks";
+import { getMessageById, getParticipant } from "@/mocks";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -53,7 +53,6 @@ function ActionRow({
   onCancelEdit,
   onAddTask,
   onComplete,
-  onWaiting,
   onNotMine,
   onDismiss,
   onStartEdit,
@@ -67,7 +66,6 @@ function ActionRow({
   onCancelEdit: () => void;
   onAddTask: () => void;
   onComplete: () => void;
-  onWaiting: () => void;
   onNotMine: () => void;
   onDismiss: () => void;
   onStartEdit: () => void;
@@ -111,7 +109,6 @@ function ActionRow({
         <DropdownMenuContent align="start" className="min-w-[200px]">
           <DropdownMenuItem onSelect={onAddTask}>הוסף למשימות שלי</DropdownMenuItem>
           <DropdownMenuItem onSelect={onComplete}>כבר בוצע</DropdownMenuItem>
-          <DropdownMenuItem onSelect={onWaiting}>סמן כממתין</DropdownMenuItem>
           <DropdownMenuItem onSelect={onNotMine}>לא באחריותי</DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={onDismiss}>זו לא משימה</DropdownMenuItem>
@@ -171,16 +168,22 @@ export function NeedsYouCard({
       toast("הפעולה כבר נוספה למשימות");
       return;
     }
+    const sourceMessage = getMessageById(action.sourceMessageId);
+    const sender = sourceMessage
+      ? getParticipant(sourceMessage.fromId)
+      : null;
     dispatch({
       type: "ADD_TASK_FROM_ACTION",
       actionId: action.id,
       task: {
         id: `user-task-${action.id}`,
         title,
-        threadId,
-        assigneeId: CURRENT_USER_ID,
         status: "open",
         sourceMessageId: action.sourceMessageId,
+        sourceThreadId: threadId,
+        sourceSenderName: sender?.name ?? "לא ידוע",
+        sourceSenderEmail: sender?.email ?? "",
+        createdAt: new Date().toISOString(),
       },
     });
     toast.success("נוסף למשימות שלך");
@@ -190,16 +193,22 @@ export function NeedsYouCard({
     let added = 0;
     for (const { action, title, actionState } of active) {
       if (actionState.linkedTaskId) continue;
+      const sourceMessage = getMessageById(action.sourceMessageId);
+      const sender = sourceMessage
+        ? getParticipant(sourceMessage.fromId)
+        : null;
       dispatch({
         type: "ADD_TASK_FROM_ACTION",
         actionId: action.id,
         task: {
           id: `user-task-${action.id}`,
           title,
-          threadId,
-          assigneeId: CURRENT_USER_ID,
           status: "open",
           sourceMessageId: action.sourceMessageId,
+          sourceThreadId: threadId,
+          sourceSenderName: sender?.name ?? "לא ידוע",
+          sourceSenderEmail: sender?.email ?? "",
+          createdAt: new Date().toISOString(),
         },
       });
       added += 1;
@@ -260,14 +269,6 @@ export function NeedsYouCard({
         status: "completed",
       });
       toast.success("סומן כבוצע");
-    },
-    onWaiting: () => {
-      dispatch({
-        type: "SET_PRIMARY_ACTION_STATUS",
-        actionId: item.action.id,
-        status: "waiting",
-      });
-      toast("סומן כממתין");
     },
     onNotMine: () => {
       dispatch({

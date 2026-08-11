@@ -2,14 +2,16 @@ import {
   agentSnapshots,
   attachments,
   CURRENT_USER_ID,
+  draftThreadIds,
   insights,
+  mailboxDisplayCounts,
   messages,
   participants,
-  projects,
   queueDisplayCounts,
   queueLabels,
   recentSearches,
   searchResults,
+  sentThreadIds,
   suggestedActions,
   tasks,
   threadSnapshots,
@@ -17,10 +19,12 @@ import {
 } from "@/mocks/data";
 import type {
   Attachment,
+  GroupedSearchResults,
   Message,
   MessageContentBlock,
   MessageInlineImageBlock,
   QueueId,
+  SearchHit,
   Thread,
 } from "@/types/domain";
 
@@ -28,14 +32,16 @@ export {
   agentSnapshots,
   attachments,
   CURRENT_USER_ID,
+  draftThreadIds,
   insights,
+  mailboxDisplayCounts,
   messages,
   participants,
-  projects,
   queueDisplayCounts,
   queueLabels,
   recentSearches,
   searchResults,
+  sentThreadIds,
   suggestedActions,
   tasks,
   threadSnapshots,
@@ -53,12 +59,22 @@ export type ThreadFileItem = {
   alt?: string;
 };
 
+export type MailboxView =
+  | "inbox"
+  | "unread"
+  | "starred"
+  | "sent"
+  | "drafts"
+  | "archive"
+  | "trash";
+
+export type SmartFilter = "all" | "needs_reply" | "open_tasks";
+
+/** @deprecated Prefer MailboxView + SmartFilter */
+export type InboxListFilter = MailboxView | SmartFilter;
+
 export function getParticipant(id: string) {
   return participants.find((p) => p.id === id);
-}
-
-export function getProject(id: string) {
-  return projects.find((p) => p.id === id);
 }
 
 export function getThread(id: string) {
@@ -189,7 +205,11 @@ export function getThreadFileItems(threadId: string): ThreadFileItem[] {
 }
 
 export function getTasksForThread(threadId: string) {
-  return tasks.filter((t) => t.threadId === threadId);
+  return tasks.filter((t) => t.sourceThreadId === threadId);
+}
+
+export function getAllTasks() {
+  return tasks;
 }
 
 export function getInsightsForThread(threadId: string) {
@@ -208,12 +228,10 @@ export function threadMatchesQueue(thread: Thread, queue: QueueId) {
   switch (queue) {
     case "needs_reply":
       return thread.status === "needs_reply";
-    case "waiting":
-      return thread.status === "waiting";
     case "open_tasks":
       return (
         thread.status === "open_tasks" ||
-        getTasksForThread(thread.id).some((t) => t.status !== "done")
+        getTasksForThread(thread.id).some((t) => t.status === "open")
       );
     case "unread":
       return thread.unread || thread.status === "unread";
@@ -246,34 +264,355 @@ export function searchMock(query: string) {
   );
 }
 
+function includesQuery(haystack: string | undefined | null, query: string) {
+  if (!haystack) return false;
+  return haystack.toLowerCase().includes(query);
+}
+
+function messagePlainText(message: Message) {
+  if (!message.content?.length) return message.body;
+  return message.content
+    .map((block) => {
+      if (block.type === "paragraph" || block.type === "quoted-text") return block.text;
+      if (block.type === "list") return block.items.join(" ");
+      if (block.type === "inline-image") return block.fileName;
+      return "";
+    })
+    .filter(Boolean)
+    .join(" ");
+}
+
+function signatureSearchText(message: Message) {
+  const snap = message.signatureSnapshot;
+  if (!snap) return message.signature ?? "";
+  return [
+    snap.name,
+    snap.title,
+    snap.company,
+    ...(snap.descriptionBlocks ?? []),
+    ...(snap.phoneNumbers ?? []),
+    ...(snap.emailAddresses ?? []),
+    ...(snap.links ?? []).flatMap((l) => [l.url, l.anchorText]),
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+/** Keyword search across mailbox content — grouped, each hit links to a source message. */
+export function searchMailbox(query: string): GroupedSearchResults {
+  const q = query.trim().toLowerCase();
+  const empty: GroupedSearchResults = {
+    query: query.trim(),
+    threads: [],
+    messages: [],
+    tasks: [],
+    decisions: [],
+    files: [],
+    signatures: [],
+  };
+  if (!q) return empty;
+
+  const threadHits: SearchHit[] = [];
+  const messageHits: SearchHit[] = [];
+  const taskHits: SearchHit[] = [];
+  const decisionHits: SearchHit[] = [];
+  const fileHits: SearchHit[] = [];
+  const signatureHits: SearchHit[] = [];
+
+  for (const thread of threads) {
+    if (draftThreadIds.includes(thread.id)) continue;
+
+    const subjectHit = includesQuery(thread.subject, q) || includesQuery(thread.snippet, q);
+    const participantHit = thread.participantIds.some((id) => {
+      const p = getParticipant(id);
+      return (
+        includesQuery(p?.name, q) ||
+        includesQuery(p?.email, q) ||
+        includesQuery(p?.company, q)
+      );
+    });
+
+    const threadMessages = getMessagesForThread(thread.id);
+    const firstMsg = threadMessages[0];
+    const latestMsg = threadMessages[threadMessages.length - 1];
+    const dateHit = threadMessages.some(
+      (m) => includesQuery(m.sentAt, q) || includesQuery(thread.updatedAt, q),
+    );
+
+    if (subjectHit || participantHit || dateHit) {
+      threadHits.push({
+        id: `hit-thread-${thread.id}`,
+        kind: "thread",
+        title: thread.subject,
+        snippet: thread.snippet,
+        threadId: thread.id,
+        sourceMessageId: latestMsg?.id ?? firstMsg?.id ?? "",
+        meta: getThreadPrimaryParticipant(thread)?.name,
+      });
+    }
+
+    for (const message of threadMessages) {
+      const from = getParticipant(message.fromId);
+      const recipients = [...message.toIds, ...(message.ccIds ?? [])]
+        .map((id) => getParticipant(id))
+        .filter(Boolean);
+      const body = messagePlainText(message);
+      const hitBody =
+        includesQuery(body, q) ||
+        includesQuery(message.subject, q) ||
+        includesQuery(from?.name, q) ||
+        includesQuery(from?.email, q) ||
+        includesQuery(from?.company, q) ||
+        recipients.some(
+          (p) =>
+            includesQuery(p?.name, q) ||
+            includesQuery(p?.email, q) ||
+            includesQuery(p?.company, q),
+        ) ||
+        includesQuery(message.sentAt, q);
+
+      if (hitBody) {
+        messageHits.push({
+          id: `hit-msg-${message.id}`,
+          kind: "message",
+          title: from?.name ?? "הודעה",
+          snippet: body.slice(0, 140),
+          threadId: thread.id,
+          sourceMessageId: message.id,
+          meta: thread.subject,
+        });
+      }
+
+      const sigText = signatureSearchText(message);
+      if (includesQuery(sigText, q)) {
+        signatureHits.push({
+          id: `hit-sig-${message.id}`,
+          kind: "signature",
+          title: message.signatureSnapshot?.name ?? from?.name ?? "חתימה",
+          snippet: sigText.slice(0, 140),
+          threadId: thread.id,
+          sourceMessageId: message.id,
+          meta: [
+            message.signatureSnapshot?.title,
+            message.signatureSnapshot?.company,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        });
+      }
+    }
+
+    for (const file of getThreadFileItems(thread.id)) {
+      if (
+        includesQuery(file.fileName, q) ||
+        includesQuery(file.mimeType, q) ||
+        includesQuery(file.sizeLabel, q)
+      ) {
+        fileHits.push({
+          id: `hit-file-${file.id}`,
+          kind: "file",
+          title: file.fileName,
+          snippet: `${file.sizeLabel} · ${file.mimeType}`,
+          threadId: thread.id,
+          sourceMessageId: file.messageId,
+          meta: thread.subject,
+        });
+      }
+    }
+  }
+
+  for (const task of tasks) {
+    if (
+      includesQuery(task.title, q) ||
+      includesQuery(task.sourceSenderName, q) ||
+      includesQuery(task.sourceSenderEmail, q) ||
+      includesQuery(task.dueDate, q)
+    ) {
+      taskHits.push({
+        id: `hit-task-${task.id}`,
+        kind: "task",
+        title: task.title,
+        snippet: `${task.sourceSenderName} · ${task.sourceSenderEmail}`,
+        threadId: task.sourceThreadId,
+        sourceMessageId: task.sourceMessageId,
+        meta: task.status === "open" ? "פתוחה" : task.status === "completed" ? "הושלמה" : "בוטלה",
+      });
+    }
+  }
+
+  for (const insight of insights) {
+    if (insight.kind !== "decision") continue;
+    if (
+      includesQuery(insight.title, q) ||
+      includesQuery(insight.detail, q)
+    ) {
+      decisionHits.push({
+        id: `hit-dec-${insight.id}`,
+        kind: "decision",
+        title: insight.title,
+        snippet: insight.detail,
+        threadId: insight.threadId,
+        sourceMessageId: insight.sourceMessageId ?? "",
+        meta: getThread(insight.threadId)?.subject,
+      });
+    }
+  }
+
+  for (const snap of threadSnapshots) {
+    for (const decision of snap.decisions) {
+      if (
+        decisionHits.some((h) => h.sourceMessageId === decision.sourceMessageId && h.title === decision.title)
+      ) {
+        continue;
+      }
+      if (
+        includesQuery(decision.title, q) ||
+        includesQuery(decision.body, q) ||
+        includesQuery(decision.userName, q)
+      ) {
+        decisionHits.push({
+          id: `hit-dec-snap-${decision.id}`,
+          kind: "decision",
+          title: decision.title,
+          snippet: decision.body ?? decision.title,
+          threadId: snap.threadId,
+          sourceMessageId: decision.sourceMessageId,
+          meta: decision.userName,
+        });
+      }
+    }
+  }
+
+  return {
+    query: query.trim(),
+    threads: threadHits,
+    messages: messageHits,
+    tasks: taskHits,
+    decisions: decisionHits,
+    files: fileHits,
+    signatures: signatureHits,
+  };
+}
+
 export function getThreadsByInboxFilter(
-  filter: "all" | "needs_reply" | "waiting" | "starred" | "archived",
+  filter: InboxListFilter,
   options?: {
     starredThreadIds?: string[];
     archivedThreadIds?: string[];
     deletedThreadIds?: string[];
+    smartFilter?: SmartFilter;
+    query?: string;
+    includeComposeDraft?: boolean;
   },
 ) {
   const starred = new Set(options?.starredThreadIds ?? []);
   const archived = new Set(options?.archivedThreadIds ?? []);
   const deleted = new Set(options?.deletedThreadIds ?? []);
+  const sent = new Set(sentThreadIds);
+  const drafts = new Set(draftThreadIds);
 
-  let list = threads.filter((t) => !deleted.has(t.id));
+  const mailboxViews = new Set<MailboxView>([
+    "inbox",
+    "unread",
+    "starred",
+    "sent",
+    "drafts",
+    "archive",
+    "trash",
+  ]);
+  const mailboxView: MailboxView = mailboxViews.has(filter as MailboxView)
+    ? (filter as MailboxView)
+    : "inbox";
+  const smartFilter: SmartFilter =
+    options?.smartFilter ??
+    (filter === "needs_reply" || filter === "open_tasks" ? filter : "all");
 
-  if (filter === "archived") {
-    list = list.filter((t) => archived.has(t.id));
-  } else if (filter === "starred") {
-    list = list.filter((t) => starred.has(t.id));
-  } else {
-    list = list.filter((t) => !archived.has(t.id));
-    if (filter === "all") {
-      list = list.filter((t) => t.status !== "done");
-    } else {
-      list = list.filter((t) => threadMatchesQueue(t, filter));
+  let list = [...threads];
+
+  if (mailboxView === "trash") {
+    list = list.filter((t) => deleted.has(t.id));
+  } else if (mailboxView === "archive") {
+    list = list.filter((t) => archived.has(t.id) && !deleted.has(t.id));
+  } else if (mailboxView === "drafts") {
+    list = list.filter((t) => drafts.has(t.id) && !deleted.has(t.id));
+    if (!options?.includeComposeDraft) {
+      list = list.filter((t) => t.id !== "thr-compose-new");
     }
+  } else if (mailboxView === "sent") {
+    list = list.filter(
+      (t) => sent.has(t.id) && !deleted.has(t.id) && !archived.has(t.id),
+    );
+  } else if (mailboxView === "starred") {
+    list = list.filter(
+      (t) => starred.has(t.id) && !deleted.has(t.id) && !drafts.has(t.id),
+    );
+  } else if (mailboxView === "unread") {
+    list = list.filter(
+      (t) =>
+        t.unread &&
+        !deleted.has(t.id) &&
+        !archived.has(t.id) &&
+        !drafts.has(t.id) &&
+        !sent.has(t.id),
+    );
+  } else {
+    list = list.filter(
+      (t) =>
+        !deleted.has(t.id) &&
+        !archived.has(t.id) &&
+        !drafts.has(t.id) &&
+        !sent.has(t.id),
+    );
+    list = list.filter((t) => t.status !== "done");
+  }
+
+  if (smartFilter === "needs_reply") {
+    list = list.filter((t) => threadMatchesQueue(t, "needs_reply"));
+  } else if (smartFilter === "open_tasks") {
+    list = list.filter((t) => threadMatchesQueue(t, "open_tasks"));
+  }
+
+  const q = options?.query?.trim().toLowerCase();
+  if (q) {
+    list = list.filter((thread) => threadMatchesQuickSearch(thread, q));
   }
 
   return list.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+export function threadMatchesQuickSearch(thread: Thread, query: string) {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  if (thread.subject.toLowerCase().includes(q)) return true;
+  if (thread.snippet.toLowerCase().includes(q)) return true;
+  const participantHit = thread.participantIds.some((id) => {
+    const p = getParticipant(id);
+    return (
+      Boolean(p?.name.toLowerCase().includes(q)) ||
+      Boolean(p?.email.toLowerCase().includes(q))
+    );
+  });
+  if (participantHit) return true;
+  return getMessagesForThread(thread.id).some((message) =>
+    messagePlainText(message).toLowerCase().includes(q),
+  );
+}
+
+/** AI-derived action needed — kept in model; not shown in the thread list. */
+export function getThreadRequiresAction(thread: Thread) {
+  return thread.status === "needs_reply";
+}
+
+export function getThreadOpenTaskCount(threadId: string) {
+  return getTasksForThread(threadId).filter((t) => t.status === "open").length;
+}
+
+export function getThreadAttachmentCount(threadId: string) {
+  return getThreadFileItems(threadId).length;
+}
+
+export function isDraftThread(threadId: string) {
+  return draftThreadIds.includes(threadId);
 }
 
 export function getThreadSnapshot(threadId: string) {

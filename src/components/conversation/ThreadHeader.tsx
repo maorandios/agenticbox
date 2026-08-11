@@ -8,6 +8,7 @@ import {
   CircleX,
   Clock3,
   Download,
+  MailOpen,
   MessagesSquare,
   MoreHorizontal,
   Paperclip,
@@ -422,25 +423,10 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
                   toast("סומן כלא נקרא");
                 }}
               >
-                סמן כלא נקרא
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => {
-                  dispatch({
-                    type: "SET_THREAD_STATUS",
-                    threadId: thread.id,
-                    status: "waiting",
-                  });
-                  toast("השיחה הועברה לממתינים");
-                }}
-              >
-                העבר את השיחה לממתינים
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => toast("תזכורת תוגדר מאוחר יותר (מדומה)")}>
-                הזכר לי מאוחר יותר
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => toast("העברה לפרויקט (מדומה)")}>
-                העבר לפרויקט
+                <span className="inline-flex items-center gap-2">
+                  <MailOpen className="size-4" strokeWidth={1.75} />
+                  סמן כלא נקרא
+                </span>
               </DropdownMenuItem>
 
               <DropdownMenuSeparator />

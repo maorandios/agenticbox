@@ -36,7 +36,7 @@
   --motion-drawer: 210ms;
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --rail-width: 80px;
-  --thread-list-width: 330px;
+  --thread-list-width: clamp(320px, 22vw, 350px);
   --snapshot-width: 414px;
 }
 

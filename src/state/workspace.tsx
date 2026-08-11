@@ -1,16 +1,16 @@
 "use client";
 
 import * as React from "react";
-import type { MailboxStatus, QueueId, SearchMode, Task } from "@/types/domain";
+import type { MailboxStatus, SearchMode, Task, ThreadStatus } from "@/types/domain";
+import type { MailboxView, SmartFilter } from "@/mocks";
 
 export type ComposerMode = "reply" | "replyAll" | "forward";
 
-export type InboxFilter = "all" | "needs_reply" | "waiting" | "starred" | "archived";
+export type InboxFilter = MailboxView | SmartFilter;
 
 export type PrimaryActionStatus =
   | "active"
   | "completed"
-  | "waiting"
   | "not_mine"
   | "dismissed";
 
@@ -21,6 +21,9 @@ export type PrimaryActionState = {
 };
 
 export type WorkspaceState = {
+  mailboxView: MailboxView;
+  smartFilter: SmartFilter;
+  /** @deprecated use mailboxView + smartFilter */
   selectedQueue: InboxFilter;
   panels: {
     navCollapsed: boolean;
@@ -30,8 +33,7 @@ export type WorkspaceState = {
     string,
     Partial<{
       unread: boolean;
-      status: QueueId;
-      projectId: string;
+      status: ThreadStatus;
     }>
   >;
   starredThreadIds: string[];
@@ -60,6 +62,7 @@ export type WorkspaceState = {
     drafting?: boolean;
     /** Bumps to request focus/expand from outside (insights panel) */
     focusToken?: number;
+    composeNew?: boolean;
   };
   improvePreview: string | null;
   commandMenuOpen: boolean;
@@ -75,12 +78,17 @@ export type WorkspaceState = {
 
 export type WorkspaceAction =
   | { type: "SET_QUEUE"; queue: InboxFilter }
+  | { type: "SET_MAILBOX_VIEW"; view: MailboxView }
+  | { type: "SET_SMART_FILTER"; filter: SmartFilter }
+  | { type: "START_COMPOSE_NEW" }
+  | { type: "CLEAR_COMPOSE_NEW" }
   | { type: "SET_AGENT_OPEN"; open: boolean }
   | { type: "TOGGLE_AGENT" }
   | { type: "SET_NAV_COLLAPSED"; collapsed: boolean }
   | { type: "MARK_THREAD_READ"; threadId: string }
   | { type: "COMPLETE_TASK"; taskId: string }
   | { type: "UNDO_COMPLETE_TASK"; taskId: string }
+  | { type: "CANCEL_TASK"; taskId: string }
   | { type: "DISMISS_INSIGHT"; insightId: string }
   | { type: "APPROVE_INSIGHT"; insightId: string }
   | { type: "SET_COMPOSER_MODE"; mode: ComposerMode }
@@ -95,7 +103,6 @@ export type WorkspaceAction =
   | { type: "SET_SEARCH_QUERY"; query: string }
   | { type: "SET_SEARCH_MODE"; mode: SearchMode }
   | { type: "SET_SEARCH_STATUS"; status: WorkspaceState["search"]["status"]; resultId?: string }
-  | { type: "ASSIGN_THREAD_PROJECT"; threadId: string; projectId: string }
   | { type: "SET_MAILBOX_STATUS"; status: MailboxStatus }
   | { type: "HIGHLIGHT_MESSAGE"; messageId: string | null }
   | { type: "TOGGLE_STAR_THREAD"; threadId: string }
@@ -109,7 +116,7 @@ export type WorkspaceAction =
   | { type: "REVEAL_EXTERNAL_IMAGE"; imageId: string }
   | { type: "ALWAYS_SHOW_IMAGES_FROM_SENDER"; senderId: string }
   | { type: "MARK_THREAD_UNREAD"; threadId: string }
-  | { type: "SET_THREAD_STATUS"; threadId: string; status: QueueId }
+  | { type: "SET_THREAD_STATUS"; threadId: string; status: ThreadStatus }
   | {
       type: "ADD_TASK_FROM_ACTION";
       task: Task;
@@ -133,7 +140,9 @@ export type WorkspaceAction =
     };
 
 export const initialWorkspaceState: WorkspaceState = {
-  selectedQueue: "all",
+  mailboxView: "inbox",
+  smartFilter: "all",
+  selectedQueue: "inbox",
   panels: {
     navCollapsed: false,
     agentOpen: false,
@@ -158,6 +167,7 @@ export const initialWorkspaceState: WorkspaceState = {
     pendingDraftText: null,
     drafting: false,
     focusToken: 0,
+    composeNew: false,
   },
   improvePreview: null,
   commandMenuOpen: false,
@@ -185,13 +195,92 @@ function patchPrimaryAction(
   };
 }
 
+function mapUserTask(
+  state: WorkspaceState,
+  taskId: string,
+  patch: Partial<Task>,
+): WorkspaceState {
+  return {
+    ...state,
+    userTasks: state.userTasks.map((t) =>
+      t.id === taskId ? { ...t, ...patch } : t,
+    ),
+  };
+}
+
 export function workspaceReducer(
   state: WorkspaceState,
   action: WorkspaceAction,
 ): WorkspaceState {
   switch (action.type) {
-    case "SET_QUEUE":
-      return { ...state, selectedQueue: action.queue };
+    case "SET_QUEUE": {
+      const mailboxViews = new Set([
+        "inbox",
+        "unread",
+        "starred",
+        "sent",
+        "drafts",
+        "archive",
+        "trash",
+      ] as const);
+      if ((mailboxViews as Set<string>).has(action.queue)) {
+        const view = action.queue as MailboxView;
+        return {
+          ...state,
+          selectedQueue: view,
+          mailboxView: view,
+          smartFilter: "all",
+        };
+      }
+      return {
+        ...state,
+        selectedQueue: action.queue,
+        smartFilter: action.queue as SmartFilter,
+      };
+    }
+    case "SET_MAILBOX_VIEW":
+      return {
+        ...state,
+        mailboxView: action.view,
+        selectedQueue: action.view,
+        smartFilter: "all",
+      };
+    case "SET_SMART_FILTER":
+      return {
+        ...state,
+        smartFilter: action.filter,
+        selectedQueue:
+          action.filter === "all" ? state.mailboxView : action.filter,
+      };
+    case "START_COMPOSE_NEW":
+      if (state.composer.composeNew && state.mailboxView === "drafts") {
+        return state;
+      }
+      return {
+        ...state,
+        mailboxView: "drafts",
+        smartFilter: "all",
+        selectedQueue: "drafts",
+        composer: {
+          ...state.composer,
+          mode: "forward",
+          text: "",
+          composeNew: true,
+          draftSavedAt: state.composer.draftSavedAt ?? new Date().toISOString(),
+          focusToken: (state.composer.focusToken ?? 0) + 1,
+          draftActionCount: null,
+          pendingDraftText: null,
+          drafting: false,
+        },
+      };
+    case "CLEAR_COMPOSE_NEW":
+      return {
+        ...state,
+        composer: {
+          ...state.composer,
+          composeNew: false,
+        },
+      };
     case "SET_AGENT_OPEN":
       return {
         ...state,
@@ -218,23 +307,32 @@ export function workspaceReducer(
           },
         },
       };
-    case "COMPLETE_TASK":
+    case "COMPLETE_TASK": {
       if (state.completedTaskIds.includes(action.taskId)) return state;
-      return {
-        ...state,
-        completedTaskIds: [...state.completedTaskIds, action.taskId],
-        userTasks: state.userTasks.map((t) =>
-          t.id === action.taskId ? { ...t, status: "done" } : t,
-        ),
-      };
+      const completedAt = new Date().toISOString();
+      return mapUserTask(
+        {
+          ...state,
+          completedTaskIds: [...state.completedTaskIds, action.taskId],
+        },
+        action.taskId,
+        { status: "completed", completedAt },
+      );
+    }
     case "UNDO_COMPLETE_TASK":
-      return {
-        ...state,
-        completedTaskIds: state.completedTaskIds.filter((id) => id !== action.taskId),
-        userTasks: state.userTasks.map((t) =>
-          t.id === action.taskId ? { ...t, status: "open" } : t,
-        ),
-      };
+      return mapUserTask(
+        {
+          ...state,
+          completedTaskIds: state.completedTaskIds.filter((id) => id !== action.taskId),
+        },
+        action.taskId,
+        { status: "open", completedAt: undefined },
+      );
+    case "CANCEL_TASK":
+      return mapUserTask(state, action.taskId, {
+        status: "cancelled",
+        cancelledAt: new Date().toISOString(),
+      });
     case "DISMISS_INSIGHT":
       return {
         ...state,
@@ -320,17 +418,6 @@ export function workspaceReducer(
           ...state.search,
           status: action.status,
           resultId: action.resultId,
-        },
-      };
-    case "ASSIGN_THREAD_PROJECT":
-      return {
-        ...state,
-        threadOverrides: {
-          ...state.threadOverrides,
-          [action.threadId]: {
-            ...state.threadOverrides[action.threadId],
-            projectId: action.projectId,
-          },
         },
       };
     case "SET_MAILBOX_STATUS":
@@ -447,21 +534,16 @@ export function workspaceReducer(
       });
       const linkedId = next.primaryActionStates[action.actionId]?.linkedTaskId;
       if (linkedId && action.status === "completed") {
+        const completedAt = new Date().toISOString();
         next = {
           ...next,
           completedTaskIds: next.completedTaskIds.includes(linkedId)
             ? next.completedTaskIds
             : [...next.completedTaskIds, linkedId],
           userTasks: next.userTasks.map((t) =>
-            t.id === linkedId ? { ...t, status: "done" } : t,
-          ),
-        };
-      }
-      if (linkedId && action.status === "waiting") {
-        next = {
-          ...next,
-          userTasks: next.userTasks.map((t) =>
-            t.id === linkedId ? { ...t, status: "waiting" } : t,
+            t.id === linkedId
+              ? { ...t, status: "completed", completedAt }
+              : t,
           ),
         };
       }

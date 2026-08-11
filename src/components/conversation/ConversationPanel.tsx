@@ -781,8 +781,17 @@ export function ConversationPanel({ threadId }: { threadId: string }) {
   ].sort((a, b) => a.sentAt.localeCompare(b.sentAt));
 
   React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const messageId = params.get("m");
+    if (!messageId) return;
+    dispatch({ type: "HIGHLIGHT_MESSAGE", messageId });
+  }, [threadId, dispatch]);
+
+  React.useEffect(() => {
     if (!state.highlightedMessageId) return;
-    const el = document.getElementById(`message-${state.highlightedMessageId}`);
+    const messageId = state.highlightedMessageId;
+    const el = document.getElementById(`message-${messageId}`);
     el?.scrollIntoView({ behavior: "smooth", block: "center" });
     const timer = window.setTimeout(() => {
       dispatch({ type: "HIGHLIGHT_MESSAGE", messageId: null });

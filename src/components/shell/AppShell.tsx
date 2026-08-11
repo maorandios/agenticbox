@@ -16,14 +16,14 @@ export function AppShell({ activeThreadId, conversation }: AppShellProps) {
       <NavRail />
 
       <section
-        className="flex h-full w-[var(--thread-list-width)] shrink-0 flex-col border-l border-[var(--border)] bg-[var(--surface-subtle)]"
+        className="flex h-dvh w-[var(--thread-list-width)] shrink-0 flex-col border-l border-[var(--border)] bg-white"
         aria-label="תיבת עבודה"
       >
         <ThreadSidebar activeThreadId={activeThreadId} />
       </section>
 
       <section className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--surface)]" aria-label="השיחה">
-        {activeThreadId ? conversation : null}
+        {conversation}
       </section>
 
       {activeThreadId ? <ThreadSnapshotPanel threadId={activeThreadId} /> : null}

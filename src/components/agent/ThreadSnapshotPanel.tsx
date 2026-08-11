@@ -14,16 +14,13 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { CURRENT_USER_ID, getThreadSnapshot } from "@/mocks";
-import { NeedsYouCard, resolvePrimaryActionTitle } from "@/components/agent/NeedsYouCard";
+import { NeedsYouCard } from "@/components/agent/NeedsYouCard";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  getPrimaryActionState,
-  useWorkspace,
-} from "@/state/workspace";
+import { useWorkspace } from "@/state/workspace";
 import type { ThreadSnapshotItem } from "@/types/domain";
 
 const PREVIEW_LIMIT = 3;
@@ -193,32 +190,11 @@ function SnapshotSection({
 
 export function ThreadSnapshotPanel({ threadId }: { threadId: string }) {
   const snapshot = getThreadSnapshot(threadId);
-  const { state, dispatch } = useWorkspace();
+  const { dispatch } = useWorkspace();
 
   const showSource = (messageId: string) => {
     dispatch({ type: "HIGHLIGHT_MESSAGE", messageId });
   };
-
-  const waitingFromActions = React.useMemo((): ThreadSnapshotItem[] => {
-    const items: ThreadSnapshotItem[] = [];
-    for (const action of snapshot.primary.actions) {
-      const actionState = getPrimaryActionState(
-        state.primaryActionStates,
-        action.id,
-      );
-      if (actionState.status !== "waiting") continue;
-      const title = resolvePrimaryActionTitle(action, actionState);
-      items.push({
-        id: `wait-from-${action.id}`,
-        title,
-        body: title,
-        sourceMessageId: action.sourceMessageId,
-        userName: "מאור אלון",
-        userEmail: "maor@agenticbox.demo",
-      });
-    }
-    return items;
-  }, [snapshot.primary.actions, state.primaryActionStates]);
 
   return (
     <aside
@@ -259,7 +235,7 @@ export function ThreadSnapshotPanel({ threadId }: { threadId: string }) {
         <SnapshotSection
           title="ממתינים"
           icon={Clock3}
-          items={waitingFromActions}
+          items={snapshot.waitingOn}
           onSelect={showSource}
         />
       </div>

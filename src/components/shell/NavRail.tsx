@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  FolderKanban,
   Inbox,
   ListTodo,
   Search,
@@ -20,8 +19,8 @@ const mainItems = [
   { href: "/inbox", label: "תיבה", icon: Inbox },
   { href: "/search", label: "חיפוש", icon: Search },
   { href: "/tasks", label: "משימות", icon: ListTodo },
-  { href: "/projects", label: "פרויקטים", icon: FolderKanban },
 ] as const;
+
 
 export function NavRail() {
   const pathname = usePathname();

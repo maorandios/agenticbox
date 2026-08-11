@@ -1165,7 +1165,7 @@ export function Composer({
                     </span>
                     <button
                       type="button"
-                      aria-label="הסתר תזכורת"
+                      aria-label="הסתר"
                       onClick={() => setDraftChipDismissed(true)}
                       className="inline-flex size-5 items-center justify-center rounded-full hover:bg-[var(--surface-hover)]"
                     >

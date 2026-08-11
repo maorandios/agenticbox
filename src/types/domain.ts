@@ -1,11 +1,15 @@
-export type QueueId =
-  | "needs_reply"
-  | "waiting"
-  | "open_tasks"
-  | "unread"
-  | "done";
+export type QueueId = "needs_reply" | "open_tasks" | "unread" | "done";
 
 export type MailboxStatus = "connected" | "disconnected";
+
+export type MailboxView =
+  | "inbox"
+  | "unread"
+  | "starred"
+  | "sent"
+  | "drafts"
+  | "archive"
+  | "trash";
 
 export type Participant = {
   id: string;
@@ -14,15 +18,6 @@ export type Participant = {
   company?: string;
   initials: string;
   avatarUrl?: string;
-};
-
-export type Project = {
-  id: string;
-  name: string;
-  participantIds: string[];
-  threadIds: string[];
-  openTaskCount: number;
-  latestDecision?: string;
 };
 
 export type Attachment = {
@@ -146,36 +141,41 @@ export type Message = {
   attachmentIds?: string[];
 };
 
-export type ThreadStatus =
-  | "needs_reply"
-  | "waiting"
-  | "open_tasks"
-  | "unread"
-  | "done";
+export type ThreadStatus = "needs_reply" | "open_tasks" | "unread" | "done";
 
+/**
+ * Mailbox thread.
+ * AI signals (`status` needs_reply / open_tasks, plus open-task counts from tasks[])
+ * stay in the model for insights/tasks surfaces — they are not shown in the thread list.
+ */
 export type Thread = {
   id: string;
   subject: string;
   snippet: string;
   participantIds: string[];
-  projectId?: string;
   status: ThreadStatus;
   unread: boolean;
   updatedAt: string;
   badge?: string;
   language: "he" | "en" | "mixed";
+  /** Mock: last outbound send failed */
+  sendFailed?: boolean;
 };
 
-export type TaskStatus = "open" | "waiting" | "overdue" | "done";
+export type TaskStatus = "open" | "completed" | "cancelled";
 
 export type Task = {
   id: string;
   title: string;
-  threadId: string;
-  assigneeId?: string | null;
-  dueAt?: string;
   status: TaskStatus;
+  dueDate?: string;
   sourceMessageId: string;
+  sourceThreadId: string;
+  sourceSenderName: string;
+  sourceSenderEmail: string;
+  createdAt: string;
+  completedAt?: string;
+  cancelledAt?: string;
 };
 
 export type InsightKind =
@@ -184,8 +184,7 @@ export type InsightKind =
   | "question"
   | "waiting"
   | "commitment"
-  | "task"
-  | "project_suggestion";
+  | "task";
 
 export type Insight = {
   id: string;
@@ -214,16 +213,42 @@ export type AgentSnapshot = {
   tasks: string[];
   decisions: string[];
   questions: string[];
+  /** Factual waiting insights extracted from the thread — not a user-managed status */
   waitingOn: string[];
   commitments: string[];
-  projectSuggestion?: {
-    projectId: string;
-    reason: string;
-  };
 };
 
 export type SearchMode = "keyword" | "nl";
 
+export type SearchHitKind =
+  | "thread"
+  | "message"
+  | "task"
+  | "decision"
+  | "file"
+  | "signature";
+
+export type SearchHit = {
+  id: string;
+  kind: SearchHitKind;
+  title: string;
+  snippet: string;
+  threadId: string;
+  sourceMessageId: string;
+  meta?: string;
+};
+
+export type GroupedSearchResults = {
+  query: string;
+  threads: SearchHit[];
+  messages: SearchHit[];
+  tasks: SearchHit[];
+  decisions: SearchHit[];
+  files: SearchHit[];
+  signatures: SearchHit[];
+};
+
+/** Legacy NL canned answers for demo queries */
 export type SearchResult = {
   id: string;
   query: string;
@@ -234,7 +259,7 @@ export type SearchResult = {
   threadIds: string[];
 };
 
-export type ThreadSnapshotPrimaryMode = "needs_you" | "waiting" | "none";
+export type ThreadSnapshotPrimaryMode = "needs_you" | "none";
 
 export type ThreadPrimaryAction = {
   id: string;
@@ -271,5 +296,6 @@ export type ThreadSnapshot = {
   recentChanges: ThreadSnapshotItem[];
   openTasks: ThreadSnapshotItem[];
   decisions: ThreadSnapshotItem[];
+  /** Factual waiting insights extracted from the thread */
   waitingOn: ThreadSnapshotItem[];
 };
