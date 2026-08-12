@@ -65,6 +65,15 @@ export const onyxChatFullResponseSchema = z.object({
 export const onyxAskInputSchema = z.object({
   question: z.string().min(1),
   chatSessionId: z.string().nullable().optional(),
+  /** Best-effort Onyx BaseFilters tags — not a Production multi-tenant boundary. */
+  metadataFilters: z
+    .array(
+      z.object({
+        tag_key: z.string().min(1),
+        tag_value: z.string().min(1),
+      }),
+    )
+    .optional(),
 });
 
 export type OnyxUpsertDocumentInput = z.infer<typeof onyxUpsertDocumentInputSchema>;

@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getMailAccountForUser } from "@/server/mail/account-service";
 import { sanitizeEmailHtml } from "@/server/mail/sanitize/html";
 import type { Attachment, Message, Participant } from "@/types/domain";
 import {
@@ -40,12 +41,16 @@ export async function getMessagesForThreadOwned(params: {
   userId: string;
   threadId: string;
 }): Promise<ThreadMessagesResult | null> {
+  const account = await getMailAccountForUser(params.userId);
+  if (!account) return null;
+
   const admin = createAdminClient();
 
   const { data: thread, error: tErr } = await admin
     .from("threads")
     .select("id")
     .eq("user_id", params.userId)
+    .eq("mail_account_id", account.id)
     .eq("id", params.threadId)
     .maybeSingle();
   if (tErr) throw new Error(`thread_lookup_failed:${tErr.message}`);

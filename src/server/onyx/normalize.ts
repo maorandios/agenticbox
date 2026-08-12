@@ -20,10 +20,19 @@ function asMetadata(
 export function normalizeCitations(raw: OnyxChatFullResponse): OnyxSourceRef[] {
   const byId = new Map<string, OnyxSourceRef>();
 
+  const canonId = (value: string) => {
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  };
+
   for (const doc of raw.top_documents ?? []) {
     if (!doc?.document_id) continue;
-    byId.set(doc.document_id, {
-      documentId: doc.document_id,
+    const documentId = canonId(doc.document_id);
+    byId.set(documentId, {
+      documentId,
       citationNumber: null,
       semanticIdentifier: doc.semantic_identifier ?? null,
       blurb: doc.blurb ?? null,
@@ -34,14 +43,15 @@ export function normalizeCitations(raw: OnyxChatFullResponse): OnyxSourceRef[] {
 
   for (const cite of raw.citation_info ?? []) {
     if (!cite?.document_id) continue;
-    const existing = byId.get(cite.document_id);
+    const documentId = canonId(cite.document_id);
+    const existing = byId.get(documentId);
     if (existing) {
       existing.citationNumber =
         typeof cite.citation_number === "number" ? cite.citation_number : existing.citationNumber;
       continue;
     }
-    byId.set(cite.document_id, {
-      documentId: cite.document_id,
+    byId.set(documentId, {
+      documentId,
       citationNumber:
         typeof cite.citation_number === "number" ? cite.citation_number : null,
       semanticIdentifier: null,
@@ -68,6 +78,14 @@ export function normalizeAnswer(opts: {
   const chatSessionId = raw.chat_session_id ?? null;
 
   if (raw.error_msg && !raw.answer?.trim()) {
+    const err = raw.error_msg.toLowerCase();
+    const llmUnavailable =
+      err.includes("no cred") ||
+      err.includes("apierror") ||
+      err.includes("litellm") ||
+      err.includes("openai service error") ||
+      err.includes("anthropic") ||
+      err.includes("model");
     return {
       status: "failed",
       answer: "",
@@ -75,7 +93,7 @@ export function normalizeAnswer(opts: {
       chatSessionId,
       requestId,
       latencyMs,
-      errorCode: "onyx_error_msg",
+      errorCode: llmUnavailable ? "onyx_llm_unavailable" : "onyx_error_msg",
     };
   }
 

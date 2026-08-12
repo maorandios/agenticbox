@@ -67,15 +67,25 @@ export async function upsertDocument(opts: {
     });
   }
 
+  // Onyx may echo document_id URL-encoded (e.g. user%3A…); keep canonical id.
+  const documentId = (() => {
+    const raw = data.document_id?.trim() || input.id;
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  })();
+
   onyxLog("info", "onyx_upsert_completed", {
     requestId: opts.requestId,
-    documentId: data.document_id,
+    documentId,
     alreadyExisted: data.already_existed,
     latencyMs,
   });
 
   return {
-    documentId: data.document_id,
+    documentId,
     alreadyExisted: data.already_existed,
     requestId: opts.requestId,
     latencyMs,

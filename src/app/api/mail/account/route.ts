@@ -3,6 +3,7 @@ import { requireUser } from "@/server/auth/require-user";
 import { getMailAccountForUser } from "@/server/mail/account-service";
 import { assertNoSecretLeak } from "@/server/mail/account-dto";
 import { PRIVATE_NO_STORE } from "@/server/mail/read/http";
+import { getEmailSyncMaxThreads } from "@/server/mail/sync/types";
 
 export async function GET() {
   const { user } = await requireUser();
@@ -15,7 +16,10 @@ export async function GET() {
 
   try {
     const account = await getMailAccountForUser(user.id);
-    const body = { account };
+    const body = {
+      account,
+      backfillMaxThreads: getEmailSyncMaxThreads(),
+    };
     assertNoSecretLeak(body);
     return NextResponse.json(body, { headers: PRIVATE_NO_STORE });
   } catch {

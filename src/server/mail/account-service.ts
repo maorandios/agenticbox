@@ -36,29 +36,56 @@ export async function getMailAccountForUser(
   if (error) {
     throw new Error(`Failed to load mail account: ${error.message}`);
   }
-  if (!data) {
-    // Also surface the latest disconnected account for reconnect UI
-    const disconnected = await admin
-      .from("mail_accounts")
-      .select(
-        "id, user_id, email, provider, sync_status, last_successful_sync_at, error_message_safe, aliases, thread_count_synced, message_count_synced, sync_started_at, sync_finished_at, sync_rate_limit_hits, sync_retry_count, backfill_completed_at",
-      )
-      .eq("user_id", userId)
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (disconnected.error) {
-      throw new Error(`Failed to load mail account: ${disconnected.error.message}`);
-    }
-    if (!disconnected.data) return null;
-    const dto = toMailAccountDto(disconnected.data as DbMailAccount);
-    assertNoSecretLeak(dto);
-    return dto;
-  }
+  if (!data) return null;
 
   const dto = toMailAccountDto(data as DbMailAccount);
   assertNoSecretLeak(dto);
   return dto;
+}
+
+/** Soft-deactivate every other connected account for this user (keep mail rows). */
+async function deactivateOtherMailAccounts(params: {
+  userId: string;
+  keepMailAccountId: string;
+}) {
+  const admin = createAdminClient();
+  const { data: others, error } = await admin
+    .from("mail_accounts")
+    .select("id")
+    .eq("user_id", params.userId)
+    .neq("id", params.keepMailAccountId)
+    .neq("sync_status", "disconnected");
+
+  if (error) {
+    throw new Error(`Failed to list sibling mail accounts: ${error.message}`);
+  }
+
+  for (const row of others ?? []) {
+    const accountId = row.id as string;
+    const { data: grantId } = await admin.rpc("get_mail_account_grant", {
+      p_mail_account_id: accountId,
+    });
+    if (typeof grantId === "string" && grantId.length > 0) {
+      try {
+        await destroyNylasGrant(grantId);
+      } catch {
+        // Continue local disconnect if remote revoke fails.
+      }
+    }
+    await admin.rpc("delete_mail_account_grant", {
+      p_mail_account_id: accountId,
+    });
+    await admin
+      .from("mail_accounts")
+      .update({
+        sync_status: "disconnected",
+        error_code: null,
+        error_message_safe: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", accountId)
+      .eq("user_id", params.userId);
+  }
 }
 
 /**
@@ -97,6 +124,14 @@ export async function upsertMailAccountFromGrant(params: {
         sync_status: "pending",
         error_code: null,
         error_message_safe: null,
+        thread_count_synced: 0,
+        message_count_synced: 0,
+        backfill_cursor: null,
+        backfill_completed_at: null,
+        sync_started_at: null,
+        sync_finished_at: null,
+        sync_rate_limit_hits: 0,
+        sync_retry_count: 0,
         updated_at: new Date().toISOString(),
       })
       .eq("id", grantRow.mail_account_id)
@@ -121,8 +156,25 @@ export async function upsertMailAccountFromGrant(params: {
       throw new Error(`Failed to store grant: ${credError.message}`);
     }
 
+    await admin.from("sync_state").upsert(
+      {
+        user_id: params.userId,
+        mail_account_id: grantRow.mail_account_id,
+        phase: "idle",
+        status: "idle",
+        checkpoint: {},
+        last_error_safe: null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "mail_account_id" },
+    );
+
     const dto = toMailAccountDto(updated);
     assertNoSecretLeak(dto);
+    await deactivateOtherMailAccounts({
+      userId: params.userId,
+      keepMailAccountId: grantRow.mail_account_id,
+    });
     return { account: dto, created: false };
   }
 
@@ -143,6 +195,15 @@ export async function upsertMailAccountFromGrant(params: {
         sync_status: "pending",
         error_code: null,
         error_message_safe: null,
+        // New OAuth session for this mailbox — do not inherit prior sync progress.
+        thread_count_synced: 0,
+        message_count_synced: 0,
+        backfill_cursor: null,
+        backfill_completed_at: null,
+        sync_started_at: null,
+        sync_finished_at: null,
+        sync_rate_limit_hits: 0,
+        sync_retry_count: 0,
         updated_at: new Date().toISOString(),
       })
       .eq("id", existingByEmail.id)
@@ -167,8 +228,26 @@ export async function upsertMailAccountFromGrant(params: {
       throw new Error(`Failed to store grant: ${credError.message}`);
     }
 
+    // Reset per-account sync_state so retry cannot resume a foreign checkpoint.
+    await admin.from("sync_state").upsert(
+      {
+        user_id: params.userId,
+        mail_account_id: existingByEmail.id,
+        phase: "idle",
+        status: "idle",
+        checkpoint: {},
+        last_error_safe: null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "mail_account_id" },
+    );
+
     const dto = toMailAccountDto(updated);
     assertNoSecretLeak(dto);
+    await deactivateOtherMailAccounts({
+      userId: params.userId,
+      keepMailAccountId: existingByEmail.id,
+    });
     return { account: dto, created: false };
   }
 
@@ -204,6 +283,10 @@ export async function upsertMailAccountFromGrant(params: {
 
   const dto = toMailAccountDto(inserted);
   assertNoSecretLeak(dto);
+  await deactivateOtherMailAccounts({
+    userId: params.userId,
+    keepMailAccountId: inserted.id,
+  });
   return { account: dto, created: true };
 }
 

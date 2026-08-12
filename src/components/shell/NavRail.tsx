@@ -16,9 +16,9 @@ import {
 } from "@/components/ui/tooltip";
 
 const mainItems = [
+  { href: "/search", label: "שאל", icon: Search },
   { href: "/inbox", label: "תיבה", icon: Inbox },
-  { href: "/search", label: "חיפוש", icon: Search },
-  { href: "/tasks", label: "משימות", icon: ListTodo },
+  { href: "/tasks", label: "פיד", icon: ListTodo, placeholder: true },
 ] as const;
 
 
@@ -31,7 +31,7 @@ export function NavRail() {
       aria-label="ניווט ראשי"
     >
       <Link
-        href="/inbox"
+        href="/search"
         className="mb-5 flex size-10 items-center justify-center rounded-[var(--radius-icon)] bg-[var(--action-primary)] text-[12px] font-semibold text-[var(--action-on-primary)]"
         aria-label="AgenticBox"
         title="AgenticBox"
@@ -40,7 +40,8 @@ export function NavRail() {
       </Link>
 
       <div className="flex w-full flex-1 flex-col items-center gap-1 px-2">
-        {mainItems.map(({ href, label, icon: Icon }) => {
+        {mainItems.map(({ href, label, icon: Icon, ...rest }) => {
+          const placeholder = "placeholder" in rest && rest.placeholder;
           const active = pathname === href || pathname.startsWith(`${href}/`);
           return (
             <Tooltip key={href}>
@@ -54,6 +55,9 @@ export function NavRail() {
                       : "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]",
                   )}
                   aria-current={active ? "page" : undefined}
+                  title={
+                    placeholder ? "הפיד החכם יופעל בשלב הבא" : label
+                  }
                 >
                   {active ? (
                     <span className="absolute top-2 bottom-2 right-0 w-[2px] rounded-full bg-[var(--action-primary)]" />
@@ -64,7 +68,9 @@ export function NavRail() {
                   <span className="text-[11px] font-medium leading-none">{label}</span>
                 </Link>
               </TooltipTrigger>
-              <TooltipContent side="left">{label}</TooltipContent>
+              <TooltipContent side="left">
+                {placeholder ? "הפיד החכם יופעל בשלב הבא" : label}
+              </TooltipContent>
             </Tooltip>
           );
         })}

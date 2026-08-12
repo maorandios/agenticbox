@@ -147,6 +147,30 @@ describe("onyx http client", () => {
     ).rejects.toMatchObject({ code: "timeout" });
   });
 
+  it("does not retry AbortError timeouts", async () => {
+    const fetchMock = vi.fn(async () => {
+      const err = new Error("aborted");
+      err.name = "AbortError";
+      throw err;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = createOnyxHttpClient({
+      purpose: "chat",
+      baseUrl: "https://example.test/api",
+      apiKey: "chat-key",
+      timeoutMs: 10,
+      maxRetries: 3,
+    });
+    await expect(
+      client.request({
+        method: "GET",
+        path: "/x",
+        requestId: "r-timeout-no-retry",
+      }),
+    ).rejects.toMatchObject({ code: "timeout", retryable: false });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("throws malformed on invalid JSON", async () => {
     vi.stubGlobal(
       "fetch",

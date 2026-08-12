@@ -85,4 +85,21 @@ describe("normalizeCitations / normalizeAnswer", () => {
     expect(result.status).not.toBe("answered");
     expect(result.sources).toEqual([]);
   });
+
+  it("maps LLM credential errors to onyx_llm_unavailable", () => {
+    const result = normalizeAnswer({
+      raw: {
+        answer: "",
+        citation_info: [],
+        top_documents: [],
+        error_msg:
+          "openai service error: litellm.APIError: You have no credentials",
+        chat_session_id: "s1",
+      },
+      requestId: "r4",
+      latencyMs: 9,
+    });
+    expect(result.status).toBe("failed");
+    expect(result.errorCode).toBe("onyx_llm_unavailable");
+  });
 });

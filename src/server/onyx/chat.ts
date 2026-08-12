@@ -40,6 +40,13 @@ export async function ask(opts: {
     allowed_tool_ids: [ONYX_INTERNAL_SEARCH_TOOL_ID],
   };
 
+  if (input.metadataFilters?.length) {
+    body.internal_search_filters = {
+      source_type: ["ingestion_api"],
+      tags: input.metadataFilters,
+    };
+  }
+
   if (input.chatSessionId) {
     body.chat_session_id = input.chatSessionId;
   } else {
@@ -85,6 +92,7 @@ export async function ask(opts: {
     sourceCount: normalized.sources.length,
     latencyMs,
     hasSession: Boolean(normalized.chatSessionId),
+    errorCode: normalized.errorCode ?? null,
   });
 
   return normalized;

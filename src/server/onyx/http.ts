@@ -201,17 +201,18 @@ export function createOnyxHttpClient(opts: {
               "name" in error &&
               (error as { name?: string }).name === "AbortError");
 
+          // Timeouts must not retry: 60s×4 left the Ask UI spinning for minutes.
           const wrapped = new OnyxError({
             code: isAbort ? "timeout" : "network",
             message: isAbort
               ? "onyx_timeout"
               : `onyx_network:${redactSecrets(safeErrorMessage(error))}`,
-            retryable: true,
+            retryable: !isAbort,
             requestId,
             cause: error,
           });
 
-          if (attempt <= maxRetries) {
+          if (!isAbort && attempt <= maxRetries) {
             const waitMs = backoffMs(attempt, null);
             onyxLog("warn", "onyx_http_retry", {
               purpose,

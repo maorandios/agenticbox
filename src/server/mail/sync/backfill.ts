@@ -6,6 +6,7 @@ import { syncLog } from "./log";
 import { mapPool } from "./rate-limit";
 import {
   defaultCheckpoint,
+  getEmailSyncMaxThreads,
   getSyncConcurrency,
   getThreadsPageSize,
   type BackfillCheckpoint,
@@ -95,15 +96,22 @@ export async function startBackfillForAccount(params: {
 }) {
   const admin = createAdminClient();
   const account = await loadAccount(params.mailAccountId, params.userId);
+  if (account.sync_status === "disconnected") {
+    throw new Error("account_disconnected");
+  }
 
   let checkpoint = await readCheckpoint(params.mailAccountId, params.userId);
+  const maxThreads = getEmailSyncMaxThreads();
   if (!params.resume) {
     checkpoint = defaultCheckpoint({
       startedAt: new Date().toISOString(),
+      maxThreads,
     });
   } else {
+    // Continue pageToken/threadsDone; refresh cap from current server config.
     checkpoint = {
       ...checkpoint,
+      maxThreads,
       startedAt: checkpoint.startedAt ?? new Date().toISOString(),
       retries: checkpoint.retries + 1,
     };
@@ -131,7 +139,8 @@ export async function startBackfillForAccount(params: {
       updated_at: new Date().toISOString(),
     })
     .eq("id", account.id)
-    .eq("user_id", params.userId);
+    .eq("user_id", params.userId)
+    .neq("sync_status", "disconnected");
 
   await enqueueBackfillPage({
     jobType: "backfill_page",
@@ -152,6 +161,13 @@ export async function processBackfillPageJob(
 ): Promise<{ done: boolean; enqueuedNext: boolean }> {
   const admin = createAdminClient();
   const account = await loadAccount(job.mailAccountId, job.userId);
+  if (account.sync_status === "disconnected") {
+    syncLog("info", "backfill_skipped_disconnected", {
+      accountId: job.mailAccountId,
+    });
+    return { done: true, enqueuedNext: false };
+  }
+
   const grantId = await loadGrantId(job.mailAccountId);
   const aliases = Array.isArray(account.aliases)
     ? (account.aliases as string[])
@@ -244,7 +260,8 @@ export async function processBackfillPageJob(
         updated_at: new Date().toISOString(),
       })
       .eq("id", job.mailAccountId)
-      .eq("user_id", job.userId);
+      .eq("user_id", job.userId)
+      .neq("sync_status", "disconnected");
 
     syncLog("info", "backfill_page_done", {
       accountId: job.mailAccountId,
@@ -294,7 +311,8 @@ export async function processBackfillPageJob(
         updated_at: new Date().toISOString(),
       })
       .eq("id", job.mailAccountId)
-      .eq("user_id", job.userId);
+      .eq("user_id", job.userId)
+      .neq("sync_status", "disconnected");
 
     syncLog("error", "backfill_page_failed", {
       accountId: job.mailAccountId,
@@ -334,7 +352,8 @@ async function completeBackfill(params: {
       updated_at: finishedAt,
     })
     .eq("id", params.mailAccountId)
-    .eq("user_id", params.userId);
+    .eq("user_id", params.userId)
+    .neq("sync_status", "disconnected");
 
   syncLog("info", "backfill_completed", {
     accountId: params.mailAccountId,

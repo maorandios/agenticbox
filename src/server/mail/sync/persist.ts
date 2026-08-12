@@ -2,11 +2,18 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveDirection } from "./direction";
 import { sanitizeEmailHtml } from "@/server/mail/sanitize/html";
+import {
+  ATTACHMENTS_ON_CONFLICT,
+  normalizeAttachmentsForMessage,
+} from "./attachments-normalize";
+import { syncLog } from "./log";
 import type {
   NylasEmailName,
   NylasMessage,
   NylasThread,
 } from "./nylas-types";
+
+export { ATTACHMENTS_ON_CONFLICT, normalizeAttachmentsForMessage };
 
 function unixToIso(unix?: number | null) {
   if (unix == null || Number.isNaN(unix)) return null;
@@ -114,30 +121,40 @@ async function replaceParticipants(params: {
   }
 }
 
-async function replaceAttachments(params: {
+async function upsertAttachments(params: {
   userId: string;
   messageId: string;
   message: NylasMessage;
 }) {
   const admin = createAdminClient();
-  await admin.from("attachments_metadata").delete().eq("message_id", params.messageId);
+  const normalized = normalizeAttachmentsForMessage(params.message.attachments);
 
-  const attachments = params.message.attachments ?? [];
-  if (!attachments.length) return 0;
+  if (normalized.duplicatesNeutralized > 0 || normalized.skippedMissingId > 0) {
+    syncLog("info", "attachments_deduped", {
+      messageId: params.messageId,
+      duplicatesNeutralized: normalized.duplicatesNeutralized,
+      skippedMissingId: normalized.skippedMissingId,
+      kept: normalized.rows.length,
+    });
+  }
 
-  const rows = attachments.map((att) => ({
+  if (!normalized.rows.length) return 0;
+
+  const rows = normalized.rows.map((att) => ({
     user_id: params.userId,
     message_id: params.messageId,
-    provider_attachment_id: att.id,
-    filename: att.filename || "attachment",
-    mime_type: att.contentType ?? null,
-    size_bytes: att.size ?? null,
-    is_inline: Boolean(att.isInline),
-    content_id: att.contentId ?? null,
-    disposition: att.contentDisposition ?? null,
+    provider_attachment_id: att.provider_attachment_id,
+    filename: att.filename,
+    mime_type: att.mime_type,
+    size_bytes: att.size_bytes,
+    is_inline: att.is_inline,
+    content_id: att.content_id,
+    disposition: att.disposition,
   }));
 
-  const { error } = await admin.from("attachments_metadata").insert(rows);
+  const { error } = await admin.from("attachments_metadata").upsert(rows, {
+    onConflict: ATTACHMENTS_ON_CONFLICT,
+  });
   if (error) {
     throw new Error(`attachments_upsert_failed:${error.message}`);
   }
@@ -218,7 +235,7 @@ export async function upsertMessage(params: {
     message: params.message,
   });
 
-  const attachmentCount = await replaceAttachments({
+  const attachmentCount = await upsertAttachments({
     userId: params.userId,
     messageId,
     message: params.message,

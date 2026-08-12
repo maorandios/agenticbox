@@ -79,4 +79,11 @@ describe("mail migrations contracts", () => {
       /revoke all on function public\.mail_jobs_send[\s\S]*from public, anon, authenticated/,
     );
   });
+
+  it("adds onyx index state and dedicated onyx_jobs queue", () => {
+    const mig = readMigration("0011_onyx_index_state.sql");
+    expect(mig).toMatch(/public\.onyx_index_state/);
+    expect(mig).toMatch(/pgmq\.create\('onyx_jobs'\)/);
+    expect(mig).toMatch(/on delete restrict/);
+  });
 });

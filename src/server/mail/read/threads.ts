@@ -1,11 +1,17 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getMailAccountForUser } from "@/server/mail/account-service";
 import type { MailboxView } from "@/types/domain";
 import type { Participant, Thread } from "@/types/domain";
 import {
   participantsFromThreadSummary,
   toThreadDto,
 } from "./mappers";
+
+async function activeMailAccountId(userId: string): Promise<string | null> {
+  const account = await getMailAccountForUser(userId);
+  return account?.id ?? null;
+}
 
 export type ThreadListResult = {
   threads: Thread[];
@@ -78,6 +84,11 @@ export async function listThreadsForUser(params: {
   cursor?: string | null;
   limit?: number;
 }): Promise<ThreadListResult> {
+  const mailAccountId = await activeMailAccountId(params.userId);
+  if (!mailAccountId) {
+    return { threads: [], participants: [], nextCursor: null };
+  }
+
   const admin = createAdminClient();
   const limit = pageSize(params.limit);
   const cursor = decodeCursor(params.cursor);
@@ -88,6 +99,7 @@ export async function listThreadsForUser(params: {
       "id,subject,snippet,unread,starred,latest_message_at,participants_summary,folders",
     )
     .eq("user_id", params.userId)
+    .eq("mail_account_id", mailAccountId)
     .order("latest_message_at", { ascending: false, nullsFirst: false })
     .order("id", { ascending: false })
     .limit(limit + 1);
@@ -135,6 +147,9 @@ export async function getThreadForUser(params: {
   userId: string;
   threadId: string;
 }): Promise<{ thread: Thread; participants: Participant[] } | null> {
+  const mailAccountId = await activeMailAccountId(params.userId);
+  if (!mailAccountId) return null;
+
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("threads")
@@ -142,6 +157,7 @@ export async function getThreadForUser(params: {
       "id,subject,snippet,unread,starred,latest_message_at,participants_summary,folders",
     )
     .eq("user_id", params.userId)
+    .eq("mail_account_id", mailAccountId)
     .eq("id", params.threadId)
     .maybeSingle();
 
@@ -154,11 +170,15 @@ export async function getThreadForUser(params: {
 }
 
 export async function getDefaultThreadIdForUser(userId: string) {
+  const mailAccountId = await activeMailAccountId(userId);
+  if (!mailAccountId) return null;
+
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("threads")
     .select("id")
     .eq("user_id", userId)
+    .eq("mail_account_id", mailAccountId)
     .not("folders", "cs", "{TRASH}")
     .order("latest_message_at", { ascending: false, nullsFirst: false })
     .limit(1)

@@ -45,7 +45,8 @@ export function getOnyxConfig(requestId = "config"): OnyxConfig {
   const personaId = Number.isFinite(personaParsed) ? Math.floor(personaParsed) : 0;
   const ccPairRaw = process.env.ONYX_CC_PAIR_ID?.trim() ?? "";
   const ccPairId = Number(ccPairRaw);
-  const timeoutMs = parsePositiveInt(process.env.ONYX_TIMEOUT_MS, 60_000);
+  // Ask latency on 100 threads is often 18–75s; 120s avoids aborting slow answers.
+  const timeoutMs = parsePositiveInt(process.env.ONYX_TIMEOUT_MS, 120_000);
   const maxRetries = parsePositiveInt(process.env.ONYX_MAX_RETRIES, 3);
 
   if (!enabled) {

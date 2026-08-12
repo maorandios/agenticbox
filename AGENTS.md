@@ -1,12 +1,15 @@
 # AgenticBox — הנחיות סוכן
 
 ## שלב נוכחי
-Phase O2: Onyx Adapter server-only מוכן (feature flag `ONYX_ENABLED`).
-- אין אינדוקס מלא / queue / worker / Search API / UI Ask אמיתי עדיין.
+Phase O4 הושלם: אינדוקס 100/100 לחשבון העסקי + `POST /api/search/ask` + מסך «שאל» (`/search`) + Source Viewer (`/source/thread/[threadId]`).
+- O3 הושלם (Pilot 10/10). `EMAIL_SYNC_MAX_THREADS=100`.
+- Adapter O2 קיים; feature flag `ONYX_ENABLED`.
+- אין Feed / Push / ניתוח קבצים — O5 ממתין לאישור מפורש.
+- POC למשתמש פנימי יחיד: metadata filters ב-Onyx הם best-effort; ownership validation בשרת חובה. לא multi-tenant Production.
 - Phase 2C Inbox API mode קיים אך mock נשאר ברירת מחדל.
 - Settings: Connect + סטטוס סנכרון + התחל/Retry (Phase 2B).
 - אין Webhooks / Outlook עדיין.
-- יש להריץ migrations כולל `0008_backfill_progress_and_queue_wrappers.sql`.
+- יש להריץ migrations כולל `0008_backfill_progress_and_queue_wrappers.sql` ו-`0011_onyx_index_state.sql`.
 - לתצוגת HTML משופרת (טבלאות מ-raw): להריץ גם `0010_get_message_raw_html.sql`.
 - Onyx: `ONYX_INGESTION_API_KEY` (Admin) ל-ingest/delete בלבד; `ONYX_CHAT_API_KEY` (Basic) ל-chat בלבד; `ONYX_CC_PAIR_ID` נדרש כש-`ONYX_ENABLED=true`.
 

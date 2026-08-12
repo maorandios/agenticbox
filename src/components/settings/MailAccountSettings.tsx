@@ -37,11 +37,6 @@ export function syncTerminalBanner(
 
 export const ACTION_BANNER_AUTO_DISMISS_MS = 5000;
 
-function connectionLabel(status: MailAccountDto["syncStatus"]) {
-  if (status === "disconnected") return "מנותק";
-  return "מחובר";
-}
-
 function reasonMessage(reason: string | null) {
   switch (reason) {
     case "state_expired":
@@ -69,6 +64,7 @@ export function MailAccountSettings() {
   const searchParams = useSearchParams();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [account, setAccount] = useState<MailAccountDto | null>(null);
+  const [backfillMaxThreads, setBackfillMaxThreads] = useState(100);
   const [busy, setBusy] = useState(false);
   const [actionBanner, setActionBanner] = useState<string | null>(null);
   const mockMode = isMockEmailDataSource();
@@ -110,8 +106,17 @@ export function MailAccountSettings() {
         setLoadState("error");
         return;
       }
-      const data = (await res.json()) as { account: MailAccountDto | null };
+      const data = (await res.json()) as {
+        account: MailAccountDto | null;
+        backfillMaxThreads?: number;
+      };
       setAccount(data.account);
+      if (
+        typeof data.backfillMaxThreads === "number" &&
+        data.backfillMaxThreads > 0
+      ) {
+        setBackfillMaxThreads(data.backfillMaxThreads);
+      }
       setLoadState("ready");
     } catch {
       setLoadState("error");
@@ -167,9 +172,8 @@ export function MailAccountSettings() {
         showActionBanner("ניתוק החשבון נכשל.");
         return;
       }
-      const data = (await res.json()) as { account: MailAccountDto };
-      setAccount(data.account);
-      showActionBanner("החשבון נותק וההרשאה בוטלה.");
+      setAccount(null);
+      showActionBanner("החשבון נותק וההרשאה בוטלה. הנתונים הישנים נשמרו ולא יוצגו.");
     } catch {
       showActionBanner("ניתוק החשבון נכשל.");
     } finally {
@@ -215,11 +219,8 @@ export function MailAccountSettings() {
     }
   }
 
-  const linked =
-    Boolean(account) && account!.syncStatus !== "disconnected";
-  const needsReconnect =
-    account?.syncStatus === "needs_reconnect" ||
-    account?.syncStatus === "disconnected";
+  const linked = Boolean(account) && account!.syncStatus !== "disconnected";
+  const needsReconnect = account?.syncStatus === "needs_reconnect";
 
   return (
     <section className="mx-auto w-full max-w-lg rounded-[16px] border border-[var(--border)] bg-[var(--surface)] p-6 text-start">
@@ -272,19 +273,42 @@ export function MailAccountSettings() {
 
       {loadState === "ready" ? (
         <div className="mt-6 space-y-4">
-          {account ? (
+          {linked && account ? (
             <div className="rounded-[12px] border border-[var(--border)] px-3 py-3 space-y-1">
               <div className="text-[14px] font-medium text-[var(--text-primary)]">
+                מחובר
+              </div>
+              <div className="text-[14px] text-[var(--text-primary)]">
                 <bdi>{account.email}</bdi>
               </div>
               <div className="text-[13px] text-[var(--text-secondary)]">
-                {connectionLabel(account.syncStatus)} · סנכרון:{" "}
-                {statusLabel(account.syncStatus)}
+                עד {backfillMaxThreads} השרשורים האחרונים
               </div>
               <div className="text-[13px] text-[var(--text-secondary)]">
-                שרשורים: {account.threadCountSynced} · הודעות:{" "}
-                {account.messageCountSynced}
+                סנכרון: {statusLabel(account.syncStatus)}
               </div>
+              {account.syncStatus === "syncing" ? (
+                <div className="text-[13px] text-[var(--text-secondary)]">
+                  מסנכרן את החשבון העסקי
+                  <br />
+                  {account.threadCountSynced} מתוך עד {backfillMaxThreads} שרשורים
+                </div>
+              ) : null}
+              {account.syncStatus === "ready" ? (
+                <div className="text-[13px] text-[var(--text-secondary)]">
+                  הסנכרון הושלם
+                  <br />
+                  {account.threadCountSynced} שרשורים · {account.messageCountSynced}{" "}
+                  הודעות
+                </div>
+              ) : null}
+              {account.syncStatus !== "syncing" &&
+              account.syncStatus !== "ready" ? (
+                <div className="text-[13px] text-[var(--text-secondary)]">
+                  שרשורים: {account.threadCountSynced} · הודעות:{" "}
+                  {account.messageCountSynced}
+                </div>
+              ) : null}
               {account.errorMessageSafe ? (
                 <div className="text-[12px] text-[var(--text-secondary)]">
                   {account.errorMessageSafe}
@@ -293,7 +317,7 @@ export function MailAccountSettings() {
             </div>
           ) : (
             <p className="text-[14px] text-[var(--text-secondary)]">
-              אין חשבון Gmail מחובר.
+              אין חשבון מייל מחובר
             </p>
           )}
 
@@ -303,7 +327,7 @@ export function MailAccountSettings() {
                 href="/api/mail/connect"
                 className="inline-flex rounded-[12px] bg-[var(--action-primary)] px-4 py-2.5 text-[14px] font-medium text-[var(--action-on-primary)]"
               >
-                {account ? "חבר מחדש את Gmail" : "חבר Gmail"}
+                חבר חשבון Gmail
               </a>
             ) : null}
 
