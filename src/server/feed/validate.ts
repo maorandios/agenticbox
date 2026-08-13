@@ -1512,7 +1512,8 @@ export function validateFeedCandidates(opts: {
         confidence: 0.9,
         businessRelevanceConfidence: 0.95,
         topicKey: "legal_alert",
-      } as AcceptedCandidate);
+        replacesSourceMessageId: null,
+      } as unknown as AcceptedCandidate);
       break;
     }
   }

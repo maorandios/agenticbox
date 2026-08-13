@@ -323,7 +323,7 @@ describe.runIf(enabled)("O5A.5.2 final human review package", () => {
           const enriched = recovered.find((c) => c.type === stored.type) ?? null;
           const fromMailbox = ctx!.accountIdentities.some(
             (id) =>
-              id.email.toLowerCase() === current.fromEmail.toLowerCase(),
+              id.email.toLowerCase() === (current.fromEmail ?? "").toLowerCase(),
           );
           const externalTo =
             current.toParticipants.find((p) => !p.isMailboxOwner) ?? null;

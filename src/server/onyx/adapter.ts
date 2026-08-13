@@ -1,6 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { getOnyxConfig, requireOnyxEnabled } from "./config";
+import { getOnyxConfig, isOnyxEnabled, requireOnyxEnabled } from "./config";
 import { OnyxError } from "./errors";
 import { ask as askChat, createChatClient } from "./chat";
 import {
@@ -27,6 +27,14 @@ function newRequestId(): string {
 export async function healthCheck(): Promise<OnyxHealthResult> {
   const requestId = newRequestId();
   const started = Date.now();
+  if (!isOnyxEnabled()) {
+    return {
+      ok: false,
+      message: "onyx_disabled",
+      requestId,
+      latencyMs: 0,
+    };
+  }
   const config = getOnyxConfig(requestId);
 
   // Health is public — do not attach API keys.

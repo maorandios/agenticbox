@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
@@ -17,8 +17,31 @@ import { askMailboxQuestion } from "@/server/search/ask";
 import { POST } from "@/app/api/search/ask/route";
 
 describe("POST /api/search/ask auth", () => {
+  const prev = process.env.ONYX_ENABLED;
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.ONYX_ENABLED = "true";
+  });
+  afterEach(() => {
+    if (prev === undefined) delete process.env.ONYX_ENABLED;
+    else process.env.ONYX_ENABLED = prev;
+  });
+
+  it("returns 503 when Onyx is suspended", async () => {
+    process.env.ONYX_ENABLED = "false";
+    vi.mocked(requireUser).mockResolvedValue({
+      user: { id: "u1" } as never,
+      supabase: {} as never,
+    });
+    const res = await POST(
+      new Request("http://localhost/api/search/ask", {
+        method: "POST",
+        body: JSON.stringify({ question: "שלום" }),
+      }),
+    );
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ error: "onyx_disabled" });
+    expect(askMailboxQuestion).not.toHaveBeenCalled();
   });
 
   it("returns 401 without session", async () => {

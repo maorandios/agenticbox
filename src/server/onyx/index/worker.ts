@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isOnyxEnabled } from "@/server/onyx/config";
 import { onyxLog } from "@/server/onyx/log";
 import { processDeleteJob, processIndexJob } from "./process";
 import type { OnyxJobMessage } from "./types";
@@ -44,9 +45,6 @@ export async function processOnyxQueue(opts?: {
   maxJobs?: number;
   visibilityTimeoutSec?: number;
 }): Promise<OnyxWorkerCounters> {
-  const admin = createAdminClient();
-  const maxJobs = opts?.maxJobs ?? 3;
-  const vt = opts?.visibilityTimeoutSec ?? 120;
   const counters: OnyxWorkerCounters = {
     read: 0,
     indexed: 0,
@@ -55,6 +53,13 @@ export async function processOnyxQueue(opts?: {
     retried: 0,
     deleted: 0,
   };
+  if (!isOnyxEnabled()) {
+    onyxLog("info", "onyx_worker_skipped", { reason: "onyx_disabled" });
+    return counters;
+  }
+  const admin = createAdminClient();
+  const maxJobs = opts?.maxJobs ?? 3;
+  const vt = opts?.visibilityTimeoutSec ?? 120;
 
   for (let i = 0; i < maxJobs; i += 1) {
     const { data, error } = await admin.rpc("onyx_jobs_read", {

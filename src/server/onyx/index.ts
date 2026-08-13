@@ -10,6 +10,15 @@ export {
   OnyxError,
 } from "./adapter";
 
+export { searchDocuments } from "./search";
+export type {
+  OnyxSearchHit,
+  OnyxSearchResult,
+  OnyxLiveSearchHit,
+  OnyxLiveSearchResult,
+  SearchDocumentsInput,
+} from "./search";
+
 export { getOnyxConfig, isOnyxEnabled, requireOnyxEnabled } from "./config";
 export type { OnyxConfig } from "./config";
 

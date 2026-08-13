@@ -13,6 +13,8 @@ import {
   type EligibilityMessageInput,
 } from "./eligibility";
 import { extractFeedFromContext } from "./extract";
+import { extractWithOptionalCrossThreadContext } from "./extract-with-context";
+import { isCrossThreadContextEnabled } from "./cross-thread-context";
 import { feedLog } from "./log";
 import { persistFeedExtraction } from "./persist";
 import type { FeedExtractThreadJob } from "./schemas";
@@ -263,6 +265,47 @@ export async function processFeedExtractJob(
   }
 
   const ai = await extractFeedFromContext(ctx);
+
+  // O5C.3 — optional cross-thread context behind flag only. Never persists context output.
+  if (ai.ok && isCrossThreadContextEnabled()) {
+    const latest = ctx.messages[ctx.messages.length - 1];
+    const historyText = ctx.messages
+      .filter((m) => m.id !== latest?.id)
+      .map((m) => m.body)
+      .join("\n")
+      .slice(0, 12_000);
+    const ctxOut = await extractWithOptionalCrossThreadContext({
+      userId: job.userId,
+      mailAccountId: job.mailAccountId,
+      threadId: job.threadId,
+      extraction: ai.parsed,
+      useLiveCompletion: true,
+      currentMessageCleanText: latest?.body ?? undefined,
+      subject: ctx.subject ?? undefined,
+      participants: latest
+        ? [
+            { email: latest.fromEmail, name: latest.fromName },
+            ...latest.toParticipants.map((p) => ({
+              email: p.email,
+              name: p.displayName,
+            })),
+          ]
+        : undefined,
+      currentOccurredAt: latest?.sentAt ?? null,
+      currentThreadHistoryText: historyText,
+    });
+    feedLog("info", "feed_cross_thread_context", {
+      runId,
+      threadId: job.threadId,
+      contextStatus: ctxOut.contextStatus,
+      searchCalled: ctxOut.searchCalled,
+      completionCalled: ctxOut.completionCalled,
+      mappedCount: ctxOut.mappedCount,
+      resolutionStatus: ctxOut.resolution?.status ?? null,
+      stage1ItemCount: ctxOut.stage1Items.length,
+    });
+    // Persist path continues to use Stage 1 extraction only (ai.parsed).
+  }
 
   if (!ai.ok) {
     if (ai.circuitTripped || isCircuitBreakerError(ai.errorCode)) {

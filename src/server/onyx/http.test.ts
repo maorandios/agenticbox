@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
@@ -7,9 +7,37 @@ import { OnyxError } from "@/server/onyx/errors";
 import { z } from "zod";
 
 describe("onyx http client", () => {
+  const prev = process.env.ONYX_ENABLED;
+  beforeEach(() => {
+    process.env.ONYX_ENABLED = "true";
+  });
   afterEach(() => {
+    if (prev === undefined) delete process.env.ONYX_ENABLED;
+    else process.env.ONYX_ENABLED = prev;
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  it("blocks HTTP before fetch when ONYX_ENABLED=false", async () => {
+    process.env.ONYX_ENABLED = "false";
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const client = createOnyxHttpClient({
+      purpose: "ingestion",
+      baseUrl: "https://example.test/api",
+      apiKey: "k",
+      timeoutMs: 5000,
+      maxRetries: 1,
+    });
+    await expect(
+      client.request({
+        method: "POST",
+        path: "/search",
+        body: { query: "x" },
+        requestId: "r-disabled",
+      }),
+    ).rejects.toMatchObject({ code: "disabled", message: "onyx_disabled" });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("does not retry 401", async () => {

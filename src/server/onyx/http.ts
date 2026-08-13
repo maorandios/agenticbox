@@ -1,5 +1,6 @@
 import "server-only";
 import { z } from "zod";
+import { isOnyxEnabled } from "./config";
 import { classifyHttpError, OnyxError } from "./errors";
 import { onyxLog } from "./log";
 import { redactSecrets, safeErrorMessage } from "./redact";
@@ -90,6 +91,17 @@ export function createOnyxHttpClient(opts: {
       acceptNotFound?: boolean;
     }): Promise<{ data: T | null; status: number; latencyMs: number }> {
       const { method, path, body, requestId, schema, acceptNotFound } = opts;
+
+      // O5D — central runtime guard: never open HTTP when Onyx is suspended.
+      if (!isOnyxEnabled()) {
+        throw new OnyxError({
+          code: "disabled",
+          message: "onyx_disabled",
+          retryable: false,
+          requestId,
+        });
+      }
+
       let attempt = 0;
       const started = Date.now();
 

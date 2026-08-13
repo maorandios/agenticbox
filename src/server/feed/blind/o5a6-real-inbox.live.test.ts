@@ -447,10 +447,15 @@ describe.runIf(enabled)("O5A.6 real inbox review pilot", () => {
         const ai = await extractFeedFromContext(ctx);
         if (ai.actualModel) actualModel = ai.actualModel;
         if (ai.latencyMs != null) latencyTotal += ai.latencyMs;
-        inputTokens += ai.inputTokens ?? 0;
-        outputTokens += ai.outputTokens ?? 0;
-        totalTokens += ai.totalTokens ?? 0;
-        reasoningTokens += ai.reasoningTokens ?? 0;
+        if (ai.ok) {
+          inputTokens += ai.inputTokens ?? 0;
+          outputTokens += ai.outputTokens ?? 0;
+          totalTokens += ai.totalTokens ?? 0;
+          reasoningTokens += ai.reasoningTokens ?? 0;
+        } else {
+          outputTokens += ai.outputTokens ?? 0;
+          reasoningTokens += ai.reasoningTokens ?? 0;
+        }
 
         if (!ai.ok) {
           failures += 1;
@@ -464,9 +469,9 @@ describe.runIf(enabled)("O5A.6 real inbox review pilot", () => {
                 openai_response_id: ai.responseId,
                 actual_model: ai.actualModel,
                 latency_ms: ai.latencyMs,
-                input_tokens: ai.inputTokens,
-                output_tokens: ai.outputTokens,
-                total_tokens: ai.totalTokens,
+                input_tokens: null,
+                output_tokens: ai.outputTokens ?? null,
+                total_tokens: null,
                 completed_at: new Date().toISOString(),
               })
               .eq("id", runId);

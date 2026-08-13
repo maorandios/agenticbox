@@ -229,6 +229,43 @@ export const FeedCandidateSchema = z.object({
   replacesSourceMessageId: z.string().nullable(),
 });
 
+/** O5C.2 — whether cross-thread context is required (same extraction call). */
+export const ContextNeedReasonSchema = z.enum([
+  "prior_price_or_amount",
+  "prior_terms",
+  "prior_version",
+  "prior_decision",
+  "prior_commitment",
+  "prior_status",
+  "entity_resolution",
+  "other",
+]);
+
+export const ContextRequestSchema = z.object({
+  needed: z.boolean(),
+  reason: ContextNeedReasonSchema,
+  missingFacts: z.array(z.string().max(160)).max(8),
+  referenceIds: z.array(z.string().max(80)).max(8),
+  subjectAnchors: z.array(z.string().max(120)).max(8),
+  /** Span from CURRENT_MESSAGE or subject supporting the need (O5C.3.1). */
+  triggerEvidence: z.string().max(500).nullable().optional().default(null),
+  /** Model confidence that cross-thread context is required (0–1). */
+  confidence: z.number().min(0).max(1).optional().default(0),
+});
+
+export type ContextRequest = z.infer<typeof ContextRequestSchema>;
+export type ContextNeedReason = z.infer<typeof ContextNeedReasonSchema>;
+
+export const emptyContextRequest = (): ContextRequest => ({
+  needed: false,
+  reason: "other",
+  missingFacts: [],
+  referenceIds: [],
+  subjectAnchors: [],
+  triggerEvidence: null,
+  confidence: 0,
+});
+
 export const FeedExtractionResultSchema = z.object({
   threadClassification: z.enum([
     "business",
@@ -242,10 +279,58 @@ export const FeedExtractionResultSchema = z.object({
   skipReason: z.string().nullable(),
   items: z.array(FeedCandidateSchema).max(5),
   nextState: ThreadIntelligenceStateSchema,
+  /** Optional for backward compat; omit or null = not needed. */
+  contextRequest: ContextRequestSchema.nullable().optional(),
 });
 
 export type FeedCandidate = z.infer<typeof FeedCandidateSchema>;
 export type FeedExtractionResult = z.infer<typeof FeedExtractionResultSchema>;
+
+/** O5C.2 — future completion-call resolution contract (offline/mock in this phase). */
+export const SupportingSourceSchema = z.object({
+  threadId: z.string().min(1),
+  messageId: z.string().nullable(),
+  occurredAt: z.string().nullable(),
+  evidence: z.string().min(1).max(500),
+  role: z.enum(["trigger", "historical"]),
+});
+
+export type SupportingSource = z.infer<typeof SupportingSourceSchema>;
+
+export const SupportedCalculationSchema = z.object({
+  operation: z.enum([
+    "add",
+    "subtract",
+    "multiply",
+    "divide",
+    "percent_increase",
+    "percent_decrease",
+  ]),
+  leftOperand: z.number(),
+  rightOperand: z.number(),
+  unit: z.string().nullable(),
+  leftSource: SupportingSourceSchema,
+  rightSource: SupportingSourceSchema,
+});
+
+export type SupportedCalculation = z.infer<typeof SupportedCalculationSchema>;
+
+export const ContextAwareFeedItemSchema = FeedCandidateSchema.extend({
+  derived: z.boolean().optional().default(false),
+  formula: z.string().max(240).nullable().optional().default(null),
+  supportingSources: z.array(SupportingSourceSchema).max(8).optional().default([]),
+});
+
+export type ContextAwareFeedItem = z.infer<typeof ContextAwareFeedItemSchema>;
+
+export const ContextResolutionSchema = z.object({
+  status: z.enum(["resolved", "insufficient", "conflicting"]),
+  items: z.array(ContextAwareFeedItemSchema).max(5),
+  supportingSources: z.array(SupportingSourceSchema).max(16),
+  calculations: z.array(SupportedCalculationSchema).max(8),
+});
+
+export type ContextResolution = z.infer<typeof ContextResolutionSchema>;
 
 export const FeedExtractThreadJobSchema = z.object({
   type: z.literal("feed_extract_thread"),

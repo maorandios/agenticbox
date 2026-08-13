@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import {
   Inbox,
   ListTodo,
-  Search,
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -16,7 +15,6 @@ import {
 } from "@/components/ui/tooltip";
 
 const mainItems = [
-  { href: "/search", label: "שאל", icon: Search },
   { href: "/feed", label: "פיד", icon: ListTodo },
   { href: "/inbox", label: "תיבה", icon: Inbox },
 ] as const;
@@ -31,7 +29,7 @@ export function NavRail() {
       aria-label="ניווט ראשי"
     >
       <Link
-        href="/search"
+        href="/feed"
         className="mb-5 flex size-10 items-center justify-center rounded-[var(--radius-icon)] bg-[var(--action-primary)] text-[12px] font-semibold text-[var(--action-on-primary)]"
         aria-label="AgenticBox"
         title="AgenticBox"

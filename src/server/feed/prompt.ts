@@ -76,4 +76,12 @@ legal_or_security_claim → לכל היותר Alert אחד (unverified), לא Ac
 
 מועדים: dueAt רק עם ביטוי זמן מפורש ב־CURRENT_MESSAGE. אחרת null.
 requestedAt = SENT_AT של הודעת המקור.
-confidence + businessRelevanceConfidence + attributionConfidence + semanticPrecisionConfidence נדרשים לפעולות.`;
+confidence + businessRelevanceConfidence + attributionConfidence + semanticPrecisionConfidence נדרשים לפעולות.
+
+contextRequest (באותה קריאה; אין קריאת AI נפרדת):
+- needed=true כאשר האירוע הנוכחי משנה/מאשר/מבטל/משווה/משלים מצב קודם; מתייחס להצעה/מסמך/גרסה/התחייבות/החלטה/תנאי קודמים שאינם בשרשור הנוכחי; המשך עסקי שאינו מובן לבד; או שחסר ערך קודם לחישוב/תיאור המצב החדש.
+- needed=false כאשר המייל והשרשור הנוכחי כבר מספקים תובנה מלאה; בקשה עצמאית; שיווק/מערכת/אימות/cold outreach.
+- triggerEvidence: קטע קצר מתוך CURRENT_MESSAGE או SUBJECT שמצדיק את הצורך; אחרת null.
+- confidence: 0–1 למידת הביטחון שחסר הקשר משרשור אחר.
+- מלא missingFacts / referenceIds / subjectAnchors כשיש; אחרת מערכים ריקים.
+- אל תבקש Context רק כדי „עוד הקשר” כללי. אל תמציא מזהים.`;

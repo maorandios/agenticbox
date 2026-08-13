@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isOnyxEnabled } from "@/server/onyx/config";
 import { processOnyxQueue } from "@/server/onyx/index/worker";
 
 /**
@@ -10,6 +11,13 @@ export async function POST(request: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret || auth !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  if (!isOnyxEnabled()) {
+    return NextResponse.json(
+      { error: "onyx_disabled", processed: 0 },
+      { status: 503, headers: { "Cache-Control": "private, no-store" } },
+    );
   }
 
   try {

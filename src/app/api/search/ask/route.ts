@@ -2,6 +2,7 @@ import { z } from "zod";
 import { requireUser } from "@/server/auth/require-user";
 import { assertNoSecretLeak } from "@/server/mail/account-dto";
 import { jsonPrivate } from "@/server/mail/read/http";
+import { isOnyxEnabled } from "@/server/onyx/config";
 import { askMailboxQuestion } from "@/server/search/ask";
 
 export const maxDuration = 130;
@@ -15,6 +16,10 @@ export async function POST(request: Request) {
   const { user } = await requireUser();
   if (!user) {
     return jsonPrivate({ error: "unauthorized" }, { status: 401 });
+  }
+
+  if (!isOnyxEnabled()) {
+    return jsonPrivate({ error: "onyx_disabled" }, { status: 503 });
   }
 
   let json: unknown;

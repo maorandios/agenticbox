@@ -806,7 +806,7 @@ describe.runIf(enabled)("O5A.6.1 resume locked 30-thread pilot", () => {
           outcomes: perThread.reduce(
             (acc, t) => {
               const o = String(t.outcome);
-              acc[o] = (acc[o] ?? 0) + 1;
+              acc[o] = Number(acc[o] ?? 0) + 1;
               return acc;
             },
             {} as Record<string, number>,

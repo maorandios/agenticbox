@@ -1,12 +1,15 @@
 # AgenticBox — הנחיות סוכן
 
 ## שלב נוכחי
-Phase O5A.6.6 Standalone Professional Title Normalization — **CONTROLLED PERSIST COMPLETE** (`o5a.6_general_recall_recovery`).
-- נירמול כותרות Actions + Controlled Persist של 4 כרטיסים בלבד.
-- feed_items: 36→40; inserted 4; skipped duplicates 0; existing unmodified; True Zeros untouched.
-- דוחות: `tmp/o5a66-professional-titles.{md,json}`, `tmp/o5a66-controlled-persist.{md,json}`.
-- Rollback בטוח: `status='superseded'` לפי `extraction_version` (ללא DELETE).
-- אין O5B / Webhooks / Push / Onyx.
+Phase O5D — **ONYX SAFELY SUSPENDED — ZERO RUNTIME CALLS**.
+- `ONYX_ENABLED=false` (ברירת מחדל) + `FEED_CROSS_THREAD_CONTEXT_ENABLED=false`.
+- Onyx suspended for Feed-first MVP. May return later for deep Q&A.
+- Supabase Business Memory will be the primary cross-thread context source.
+- אין Ingestion / Search / Chat / enqueue / worker ב־runtime.
+- UI: מסך Ask/Search מוסתר מהניווט; `/search` מציג stub.
+- Guard מרכזי ב־HTTP client: לפני כל fetch → `onyx_disabled`.
+- אין Persist חדש / אין O5B / אין Business Memory עדיין.
+- דוחות O5C נשמרים ב־`tmp/`; Adapter + migrations + `onyx_index_state` לא נמחקים.
 
 ## עקרונות
 - ממשק עברית מלא + `dir="rtl"`

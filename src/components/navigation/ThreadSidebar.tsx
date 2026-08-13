@@ -477,7 +477,8 @@ export function ThreadSidebar({ activeThreadId }: { activeThreadId: string | nul
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        router.push("/search");
+        searchRef.current?.focus();
+        searchRef.current?.select();
         return;
       }
       if (event.key === "/" && !event.metaKey && !event.ctrlKey && !event.altKey) {

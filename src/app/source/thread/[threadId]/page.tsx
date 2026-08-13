@@ -56,7 +56,7 @@ export default async function SourceThreadPage({
       <div className="mx-auto w-full max-w-3xl px-6 py-6">
         <div className="mb-4 flex items-center gap-3">
           <Link
-            href="/search"
+            href="/feed"
             className="inline-flex items-center gap-1 rounded-[12px] border border-[var(--border)] px-3 py-1.5 text-[13px] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
           >
             <ArrowRight className="size-4" strokeWidth={1.75} />

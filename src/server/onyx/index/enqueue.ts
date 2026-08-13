@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isOnyxEnabled } from "@/server/onyx/config";
 import { onyxLog } from "@/server/onyx/log";
 import { buildOnyxDocumentId } from "@/server/onyx/normalize/thread-document";
 import {
@@ -9,6 +10,9 @@ import {
 } from "./types";
 
 async function sendJob(message: OnyxJobMessage): Promise<number> {
+  if (!isOnyxEnabled()) {
+    throw new Error("onyx_disabled");
+  }
   const admin = createAdminClient();
   const { data, error } = await admin.rpc("onyx_jobs_send", {
     p_message: message,
@@ -28,6 +32,9 @@ export async function enqueueThreadIndex(opts: {
   mailAccountId: string;
   threadId: string;
 }): Promise<{ enqueued: boolean; reason?: string }> {
+  if (!isOnyxEnabled()) {
+    return { enqueued: false, reason: "onyx_disabled" };
+  }
   const admin = createAdminClient();
   const documentId = buildOnyxDocumentId(opts.userId, opts.threadId);
 
@@ -87,6 +94,9 @@ export async function enqueueAccountIndex(opts: {
   skippedQueued: number;
   skippedExcluded: number;
 }> {
+  if (!isOnyxEnabled()) {
+    return { selected: 0, enqueued: 0, skippedQueued: 0, skippedExcluded: 0 };
+  }
   const limit = clampPilotLimit(opts.limit);
   const admin = createAdminClient();
 
@@ -149,6 +159,9 @@ export async function enqueueAllAccountThreads(opts: {
   skippedQueued: number;
   skippedExcluded: number;
 }> {
+  if (!isOnyxEnabled()) {
+    return { selected: 0, enqueued: 0, skippedQueued: 0, skippedExcluded: 0 };
+  }
   const admin = createAdminClient();
   const { data: account, error: accountError } = await admin
     .from("mail_accounts")
@@ -204,6 +217,9 @@ export async function enqueueThreadDelete(opts: {
   threadId: string;
   onyxDocumentId: string;
 }): Promise<void> {
+  if (!isOnyxEnabled()) {
+    return;
+  }
   const admin = createAdminClient();
   const now = new Date().toISOString();
   await admin

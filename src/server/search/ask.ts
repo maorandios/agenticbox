@@ -2,6 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getMailAccountForUser } from "@/server/mail/account-service";
 import { ask as onyxAsk } from "@/server/onyx/adapter";
+import { isOnyxEnabled } from "@/server/onyx/config";
 import { getIndexProgress } from "@/server/onyx/index/progress";
 import { onyxLog } from "@/server/onyx/log";
 import type { SearchAnswerDto, SearchSourceDto } from "@/types/search";
@@ -12,6 +13,8 @@ const LLM_UNAVAILABLE_HE =
   "שירות התשובות של Onyx אינו זמין כרגע (בעיית מודל/מפתח בצד Onyx). בדקו את הגדרות ה־LLM ב־Onyx Cloud ונסו שוב.";
 const NO_INDEX_HE = "עדיין אין מספיק מיילים מאונדקסים לחיפוש. השלימו סנכרון ואינדוקס.";
 const NO_ACCOUNT_HE = "אין חשבון מייל מחובר. חברו חשבון בהגדרות.";
+const ONYX_DISABLED_HE =
+  "חיפוש AI מושעה כרגע. AgenticBox מתמקד בפיד ובזיכרון העסקי.";
 
 function truncateSnippet(text: string, max = 180): string {
   const cleaned = text.replace(/\s+/g, " ").trim();
@@ -62,6 +65,18 @@ export async function askMailboxQuestion(opts: {
   question: string;
   chatSessionId?: string | null;
 }): Promise<SearchAnswerDto> {
+  if (!isOnyxEnabled()) {
+    return {
+      status: "failed",
+      answer: ONYX_DISABLED_HE,
+      chatSessionId: null,
+      requestId: "local",
+      latencyMs: 0,
+      sources: [],
+      errorCode: "onyx_disabled",
+    };
+  }
+
   const question = opts.question.trim();
   if (!question) {
     return {
