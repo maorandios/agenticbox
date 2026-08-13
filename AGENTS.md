@@ -1,17 +1,12 @@
 # AgenticBox — הנחיות סוכן
 
 ## שלב נוכחי
-Phase O4 הושלם: אינדוקס 100/100 לחשבון העסקי + `POST /api/search/ask` + מסך «שאל» (`/search`) + Source Viewer (`/source/thread/[threadId]`).
-- O3 הושלם (Pilot 10/10). `EMAIL_SYNC_MAX_THREADS=100`.
-- Adapter O2 קיים; feature flag `ONYX_ENABLED`.
-- אין Feed / Push / ניתוח קבצים — O5 ממתין לאישור מפורש.
-- POC למשתמש פנימי יחיד: metadata filters ב-Onyx הם best-effort; ownership validation בשרת חובה. לא multi-tenant Production.
-- Phase 2C Inbox API mode קיים אך mock נשאר ברירת מחדל.
-- Settings: Connect + סטטוס סנכרון + התחל/Retry (Phase 2B).
-- אין Webhooks / Outlook עדיין.
-- יש להריץ migrations כולל `0008_backfill_progress_and_queue_wrappers.sql` ו-`0011_onyx_index_state.sql`.
-- לתצוגת HTML משופרת (טבלאות מ-raw): להריץ גם `0010_get_message_raw_html.sql`.
-- Onyx: `ONYX_INGESTION_API_KEY` (Admin) ל-ingest/delete בלבד; `ONYX_CHAT_API_KEY` (Basic) ל-chat בלבד; `ONYX_CC_PAIR_ID` נדרש כש-`ONYX_ENABLED=true`.
+Phase O5A.3.2 — **migration fix בלבד; `0019` ממתין להחלה ידנית** (PG 15+ ל־column-specific `ON DELETE SET NULL`).
+- Bug: composite FK עם `ON DELETE SET NULL` ללא column list מאפס גם `user_id`.
+- Fix: `0019_feed_replacement_fk_delete_scope.sql` — SET NULL רק ל־`superseded_by_feed_item_id` / `supersedes_feed_item_id`.
+- `supersedes_feed_item_id` עדיין בשימוש (`persist.ts`) → נוסף `feed_items_supersedes_idx`.
+- אין OpenAI / שינוי Feed Items / O5B. לפני החלה: `select current_setting('server_version');`
+- Feed: `OPENAI_FEED_MODEL=gpt-4o-mini`, `FEED_EXTRACTION_VERSION=o5a.3`.
 
 
 ## עקרונות

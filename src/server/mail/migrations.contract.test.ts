@@ -86,4 +86,12 @@ describe("mail migrations contracts", () => {
     expect(mig).toMatch(/pgmq\.create\('onyx_jobs'\)/);
     expect(mig).toMatch(/on delete restrict/);
   });
+
+  it("adds feed intelligence tables and dedicated feed_jobs queue", () => {
+    const mig = readMigration("0012_feed_intelligence.sql");
+    expect(mig).toMatch(/public\.feed_items/);
+    expect(mig).toMatch(/public\.thread_intelligence_state/);
+    expect(mig).toMatch(/public\.feed_extraction_runs/);
+    expect(mig).toMatch(/pgmq\.create\('feed_jobs'\)/);
+  });
 });

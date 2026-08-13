@@ -15,6 +15,7 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith("/api/mail/webhooks/") ||
     pathname.startsWith("/api/internal/mail/worker") ||
     pathname.startsWith("/api/internal/onyx/worker") ||
+    pathname.startsWith("/api/internal/feed/worker") ||
     pathname.startsWith("/api/mail/oauth/callback");
 
   if (isMockEmailDataSource()) {

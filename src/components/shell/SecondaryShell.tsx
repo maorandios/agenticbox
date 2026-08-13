@@ -13,7 +13,10 @@ export function SecondaryShell({
   return (
     <div className="flex h-dvh w-screen overflow-hidden bg-[var(--background)]">
       <NavRail />
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col" aria-label={title}>
+      <main
+        className="thin-scroll min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden"
+        aria-label={title}
+      >
         {children}
       </main>
     </div>
