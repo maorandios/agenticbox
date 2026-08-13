@@ -34,8 +34,8 @@ function parseConfidence(raw: string | undefined, fallback: number): number {
 
 export const FEED_PILOT_HARD_CAP = 20;
 export const FEED_PREFILTER_SCAN_CAP = 100;
-export const DEFAULT_FEED_MODEL = "gpt-4o-mini";
-export const DEFAULT_FEED_EXTRACTION_VERSION = "o5a.3";
+export const DEFAULT_FEED_MODEL = "gpt-5-mini";
+export const DEFAULT_FEED_EXTRACTION_VERSION = "o5a.5";
 export const O5A_SUPERSEDE_REASON = "o5a_quality_calibration";
 export const O5A2_SUPERSEDE_REASON = "o5a2_attribution_calibration";
 export const O5A2_CORRECTION_REASON = "o5a2_attribution_correction";
@@ -48,7 +48,7 @@ export function getFeedConfig(): FeedConfig {
     enabled: parseBool(process.env.FEED_AI_ENABLED, false),
     apiKey: process.env.OPENAI_API_KEY?.trim() ?? "",
     model: process.env.OPENAI_FEED_MODEL?.trim() || DEFAULT_FEED_MODEL,
-    timeoutMs: parsePositiveInt(process.env.FEED_AI_TIMEOUT_MS, 60_000),
+    timeoutMs: parsePositiveInt(process.env.FEED_AI_TIMEOUT_MS, 120_000),
     pilotMaxThreads: Math.min(
       FEED_PILOT_HARD_CAP,
       parsePositiveInt(process.env.FEED_PILOT_MAX_THREADS, FEED_PILOT_HARD_CAP),

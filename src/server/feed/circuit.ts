@@ -72,7 +72,7 @@ export function mapOpenAiHttpError(opts: {
   ) {
     return "openai_quota";
   }
-  if (/timeout|AbortError/i.test(message)) {
+  if (/timeout|AbortError|aborted|ETIMEDOUT|timed out|TimeoutError/i.test(message)) {
     return "openai_timeout";
   }
   if (/refus/i.test(message)) {

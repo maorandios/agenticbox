@@ -32,6 +32,8 @@ function gateResult(
 ): FeedExtractionResult {
   return {
     threadClassification: classification,
+    communicationNature: null,
+    disposition: null,
     skipReason: null,
     items: [],
     nextState: emptyIntelligenceState(),

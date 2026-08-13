@@ -1,4 +1,17 @@
-export type FeedItemType = "action" | "change" | "decision" | "due";
+export type FeedItemType = "action" | "change" | "decision" | "due" | "alert";
+
+export type FeedAlertCategory =
+  | "legal"
+  | "security"
+  | "payment"
+  | "service"
+  | "operational"
+  | "suspicious_sender";
+
+export type FeedAlertVerificationState =
+  | "unverified"
+  | "verified"
+  | "not_required";
 
 export type FeedItemStatus =
   | "new"

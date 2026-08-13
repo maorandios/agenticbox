@@ -66,18 +66,20 @@ describe("extractFeedFromContext", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetFeedCircuit();
-    process.env.OPENAI_FEED_MODEL = "gpt-4o-mini";
+    process.env.OPENAI_FEED_MODEL = "gpt-5-mini";
   });
 
   it("makes a single responses.parse call and records actual model", async () => {
     parseMock.mockResolvedValue({
       id: "resp_1",
-      model: "gpt-4o-mini-2024-07-18",
+      model: "gpt-5-mini-2025-08-07",
       status: "completed",
       error: null,
       usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
       output_parsed: {
         threadClassification: "business",
+        communicationNature: null,
+        disposition: null,
         skipReason: null,
         items: [],
         nextState: emptyIntelligenceState(),
@@ -85,11 +87,41 @@ describe("extractFeedFromContext", () => {
     });
     const result = await extractFeedFromContext(ctx());
     expect(parseMock).toHaveBeenCalledTimes(1);
+    expect(parseMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "gpt-5-mini",
+        reasoning: { effort: "low" },
+        text: expect.objectContaining({ verbosity: "low" }),
+      }),
+    );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.model).toBe("gpt-4o-mini");
-      expect(result.actualModel).toBe("gpt-4o-mini-2024-07-18");
+      expect(result.model).toBe("gpt-5-mini");
+      expect(result.actualModel).toBe("gpt-5-mini-2025-08-07");
       expect(result.totalTokens).toBe(15);
+    }
+  });
+
+  it("maps incomplete responses without treating as zero insight payload", async () => {
+    parseMock.mockResolvedValue({
+      id: "resp_inc",
+      model: "gpt-5-mini-2025-08-07",
+      status: "incomplete",
+      incomplete_details: { reason: "max_output_tokens" },
+      error: null,
+      usage: {
+        input_tokens: 10,
+        output_tokens: 100,
+        output_tokens_details: { reasoning_tokens: 80 },
+        total_tokens: 110,
+      },
+      output_parsed: null,
+    });
+    const result = await extractFeedFromContext(ctx());
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errorCode).toBe("openai_incomplete");
+      expect(result.incompleteReason).toBe("max_output_tokens");
     }
   });
 

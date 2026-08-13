@@ -99,9 +99,17 @@ function action(over: Partial<FeedCandidate> = {}): FeedCandidate {
     beneficiary: null,
     requestModality: "implicit_request",
     requestSpeechAct: null,
+    communicationNature: null,
+    disposition: null,
+    actionState: null,
+    alertCategory: null,
+    alertVerificationState: null,
     attributionConfidence: 0.9,
     semanticPrecisionConfidence: 0.95,
     requestEvidence: null,
+    subjectEvidence: null,
+    contextEvidence: null,
+    businessObjectEvidence: null,
     supportingEvidence: [],
     responseRecipient: null,
     actionVerb: null,
@@ -456,8 +464,8 @@ describe("O5A.2 direction fixtures", () => {
         removedNormalized: cleaned.removedNormalized,
       }),
     );
-    expect(rejected).toHaveLength(0);
-    expect(accepted[0]?.dueAt).toBeNull();
+    expect(rejected.length).toBeGreaterThan(0);
+    expect(accepted).toHaveLength(0);
   });
 
   it("12: prior approval then new final-version request stays open", () => {

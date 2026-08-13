@@ -24,6 +24,9 @@ function normalizeForMatch(text: string): string {
 }
 
 const QUOTE_SPLITTERS = [
+  // Forward blocks (incl. Gmail concatenated without leading newline)
+  /-{2,}\s*Forwarded message\s*-{2,}/i,
+  /-{2,}\s*Original Message\s*-{2,}/i,
   // Gmail often concatenates without a leading newline: "חסר אוטוקאדOn Tue…wrote:"
   /(?<![A-Za-z])On\s+[A-Z][a-z]{2},?\s+[A-Z][a-z]{2}\s+\d{1,2}.+?\bwrote:\s*/i,
   /(?<![A-Za-z])On\s+.+?\bwrote:\s*/i,
@@ -57,6 +60,12 @@ export function cleanFeedMessageBody(raw: string): CleanedMessageBody {
   const removedNormalized: string[] = [];
   let text = raw.replace(/\r\n/g, "\n");
 
+  // Ensure Forward/Original separators are not glued to CURRENT lead text.
+  text = text.replace(
+    /([^\s\n])(-{2,}\s*(?:Forwarded message|Original Message)\s*-{2,})/gi,
+    "$1\n$2",
+  );
+
   if (!normalizeWhitespace(text)) {
     return { cleanText: "", removedKinds: [], removedNormalized: [] };
   }
@@ -66,7 +75,7 @@ export function cleanFeedMessageBody(raw: string): CleanedMessageBody {
     if (idx >= 0) {
       const lead = text.slice(0, idx).trim();
       // Keep a real current-message lead-in; avoid wiping quote-only bodies.
-      if (lead.length >= 5) {
+      if (lead.length >= 2) {
         const removed = text.slice(idx);
         text = text.slice(0, idx);
         removedKinds.push("quote");

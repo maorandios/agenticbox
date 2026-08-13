@@ -10,6 +10,7 @@ import {
   GitCommitHorizontal,
   ListTodo,
   Scale,
+  ShieldAlert,
 } from "lucide-react";
 import { SecondaryShell } from "@/components/shell/SecondaryShell";
 import type { FeedCardDto, FeedItemType } from "@/types/feed";
@@ -25,6 +26,8 @@ function TypeIcon({ type }: { type: FeedItemType }) {
       return <Scale {...props} />;
     case "due":
       return <CalendarClock {...props} />;
+    case "alert":
+      return <ShieldAlert {...props} />;
     default:
       return <CircleDot {...props} />;
   }

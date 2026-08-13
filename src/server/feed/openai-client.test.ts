@@ -6,7 +6,7 @@ describe("OpenAI feed client options", () => {
   beforeEach(() => {
     vi.resetModules();
     process.env.OPENAI_API_KEY = "sk-test-not-real";
-    process.env.FEED_AI_TIMEOUT_MS = "60000";
+    delete process.env.FEED_AI_TIMEOUT_MS;
   });
 
   it("constructs client with maxRetries 0", async () => {
@@ -23,7 +23,7 @@ describe("OpenAI feed client options", () => {
       expect.objectContaining({
         apiKey: "sk-test-not-real",
         maxRetries: 0,
-        timeout: 60_000,
+        timeout: 120_000,
       }),
     );
   });

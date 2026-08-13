@@ -347,6 +347,8 @@ export async function processFeedExtractJob(
   if (ctx.contextCoverage === "truncated") {
     finalAccepted = accepted.filter((c) => c.type === "action");
   }
+  // Alert type requires migration 0020 — never persist until schema applied.
+  finalAccepted = finalAccepted.filter((c) => c.type !== "alert");
 
   const intelligenceStatus =
     ctx.contextCoverage === "truncated" ? "needs_review" : "ready";

@@ -15,6 +15,8 @@ describe("Feed structured output schema O5A.1", () => {
   it("accepts empty items with business classification", () => {
     const parsed = FeedExtractionResultSchema.parse({
       threadClassification: "business",
+      communicationNature: null,
+      disposition: null,
       skipReason: null,
       items: [],
       nextState: {
@@ -50,9 +52,17 @@ describe("Feed structured output schema O5A.1", () => {
       responseRecipient: null,
       requestModality: null,
       requestSpeechAct: null,
+      communicationNature: null,
+      disposition: null,
+      actionState: null,
+      alertCategory: null,
+      alertVerificationState: null,
       attributionConfidence: null,
       semanticPrecisionConfidence: null,
       requestEvidence: null,
+      subjectEvidence: null,
+      contextEvidence: null,
+      businessObjectEvidence: null,
       supportingEvidence: [],
       businessObject: "כמות",
       previousValue: null,
@@ -69,6 +79,8 @@ describe("Feed structured output schema O5A.1", () => {
     };
     const parsed = FeedExtractionResultSchema.parse({
       threadClassification: "business",
+      communicationNature: null,
+      disposition: null,
       skipReason: null,
       items: [
         { ...base, type: "action" },
@@ -90,6 +102,8 @@ describe("Feed structured output schema O5A.1", () => {
     expect(() =>
       FeedExtractionResultSchema.parse({
         threadClassification: "business",
+        communicationNature: null,
+        disposition: null,
         skipReason: null,
         items: [
           {
@@ -137,7 +151,7 @@ describe("Feed cost config O5A.2", () => {
   it("defaults model and calibration thresholds", () => {
     process.env.OPENAI_FEED_MODEL = DEFAULT_FEED_MODEL;
     const config = getFeedConfig();
-    expect(config.model).toBe("gpt-4o-mini");
+    expect(config.model).toBe("gpt-5-mini");
     expect(config.minBusinessRelevance).toBe(0.85);
     expect(config.extractionVersion).toBe(DEFAULT_FEED_EXTRACTION_VERSION);
     expect(clampPilotLimit(100)).toBe(20);

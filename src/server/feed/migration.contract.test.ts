@@ -187,3 +187,22 @@ describe("0019 feed replacement FK delete scope migration contract", () => {
     expect(migration19).not.toMatch(/delete from public\.feed_items/i);
   });
 });
+
+describe("0020 feed alert type migration contract", () => {
+  const migration20 = readFileSync(
+    path.resolve(
+      process.cwd(),
+      "supabase/migrations/0020_feed_alert_type.sql",
+    ),
+    "utf8",
+  );
+
+  it("adds alert enum value and alert metadata columns without deletes", () => {
+    expect(migration20).toMatch(/feed_item_type[\s\S]*add value[\s\S]*'alert'/i);
+    expect(migration20).toMatch(/alert_category/);
+    expect(migration20).toMatch(/alert_verification_state/);
+    expect(migration20).toMatch(/communication_nature/);
+    expect(migration20).toMatch(/action_state/);
+    expect(migration20).not.toMatch(/delete from public\.feed_items/i);
+  });
+});

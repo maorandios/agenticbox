@@ -108,9 +108,17 @@ function baseAction(over: Partial<FeedCandidate> = {}): FeedCandidate {
     responseRecipient: null,
     requestModality: "direct_request",
     requestSpeechAct: null,
+    communicationNature: null,
+    disposition: null,
+    actionState: null,
+    alertCategory: null,
+    alertVerificationState: null,
     attributionConfidence: 0.95,
     semanticPrecisionConfidence: 0.95,
     requestEvidence: null,
+    subjectEvidence: null,
+    contextEvidence: null,
+    businessObjectEvidence: null,
     supportingEvidence: [],
     businessObject: null,
     previousValue: null,
@@ -154,7 +162,7 @@ describe("O5A.3.1 general inclusion fixtures", () => {
   it("1: missing DWG is implicit directive to recipient B", () => {
     const body = "חסר קובץ DWG";
     expect(classifyRequestSpeechAct({ body, evidenceText: body })).toBe(
-      "directive",
+      "implicit_missing_item_request",
     );
     const { accepted } = run(
       baseAction({
@@ -184,7 +192,7 @@ describe("O5A.3.1 general inclusion fixtures", () => {
     );
     expect(accepted).toHaveLength(1);
     expect(accepted[0]?.type).toBe("action");
-    expect(accepted[0]?.requestSpeechAct).toBe("directive");
+    expect(accepted[0]?.requestSpeechAct).toBe("implicit_missing_item_request");
     expect(accepted[0]?.relationToMailbox).toBe("sent_by_me");
     expect(accepted[0]?.requestedAction).toMatch(/DWG/);
     expect(accepted[0]?.requestedAction).not.toMatch(/אוטוקאד/);

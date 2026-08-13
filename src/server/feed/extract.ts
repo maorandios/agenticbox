@@ -21,6 +21,7 @@ export type FeedOpenAiCallResult =
       responseId: string | null;
       inputTokens: number | null;
       outputTokens: number | null;
+      reasoningTokens: number | null;
       totalTokens: number | null;
       latencyMs: number;
       model: string;
@@ -34,12 +35,36 @@ export type FeedOpenAiCallResult =
       actualModel: string | null;
       responseId: string | null;
       circuitTripped: boolean;
+      incompleteReason?: string | null;
+      outputTokens?: number | null;
+      reasoningTokens?: number | null;
     };
+
+/** Request options shared by live extract + contract tests. */
+export function buildFeedResponsesParseParams(opts: {
+  model: string;
+  system: string;
+  user: string;
+}) {
+  return {
+    model: opts.model,
+    reasoning: { effort: "low" as const },
+    // Visible structured JSON only — keep terse; does not change schema.
+    text: {
+      format: zodTextFormat(FeedExtractionResultSchema, "feed_extraction"),
+      verbosity: "low" as const,
+    },
+    input: [
+      { role: "system" as const, content: opts.system },
+      { role: "user" as const, content: opts.user },
+    ],
+  };
+}
 
 /**
  * Exactly one Responses API call per extraction attempt.
  * No tools, no web search, no file search, no agent loop, maxRetries: 0.
- * No automatic model fallback.
+ * No automatic model fallback / retry.
  */
 export async function extractFeedFromContext(
   ctx: FeedThreadContext,
@@ -50,21 +75,20 @@ export async function extractFeedFromContext(
   const client = getFeedOpenAiClient();
 
   try {
-    const response = await client.responses.parse({
-      model,
-      input: [
-        { role: "system", content: FEED_SYSTEM_PROMPT },
-        { role: "user", content: buildFeedUserPayload(ctx) },
-      ],
-      text: {
-        format: zodTextFormat(FeedExtractionResultSchema, "feed_extraction"),
-      },
-    });
+    const response = await client.responses.parse(
+      buildFeedResponsesParseParams({
+        model,
+        system: FEED_SYSTEM_PROMPT,
+        user: buildFeedUserPayload(ctx),
+      }),
+    );
 
     const latencyMs = Date.now() - started;
     const usage = response.usage;
     const inputTokens = usage?.input_tokens ?? null;
     const outputTokens = usage?.output_tokens ?? null;
+    const reasoningTokens =
+      usage?.output_tokens_details?.reasoning_tokens ?? null;
     const totalTokens =
       usage?.total_tokens ??
       (inputTokens != null && outputTokens != null
@@ -77,6 +101,9 @@ export async function extractFeedFromContext(
         : model;
 
     if (response.status === "incomplete" || response.error) {
+      const incompleteReason =
+        response.incomplete_details?.reason ??
+        (response.error ? "error" : "incomplete");
       return {
         ok: false,
         errorCode: "openai_incomplete",
@@ -85,6 +112,9 @@ export async function extractFeedFromContext(
         actualModel,
         responseId: response.id ?? null,
         circuitTripped: false,
+        incompleteReason,
+        outputTokens,
+        reasoningTokens,
       };
     }
 
@@ -98,6 +128,8 @@ export async function extractFeedFromContext(
         actualModel,
         responseId: response.id ?? null,
         circuitTripped: false,
+        outputTokens,
+        reasoningTokens,
       };
     }
 
@@ -112,6 +144,8 @@ export async function extractFeedFromContext(
         actualModel,
         responseId: response.id ?? null,
         circuitTripped: true,
+        outputTokens,
+        reasoningTokens,
       };
     }
 
@@ -121,6 +155,7 @@ export async function extractFeedFromContext(
       responseId: response.id ?? null,
       inputTokens,
       outputTokens,
+      reasoningTokens,
       totalTokens,
       latencyMs,
       model,
@@ -133,7 +168,14 @@ export async function extractFeedFromContext(
         ? Number((error as { status?: number }).status)
         : null;
     const message = error instanceof Error ? error.message : "unknown";
-    const errorCode = mapOpenAiHttpError({ status, message });
+    const name =
+      error && typeof error === "object" && "name" in error
+        ? String((error as { name?: string }).name)
+        : "";
+    const errorCode = mapOpenAiHttpError({
+      status,
+      message: `${name} ${message}`,
+    });
     const circuitTripped = isCircuitBreakerError(errorCode);
     if (circuitTripped) tripFeedCircuit(errorCode);
 

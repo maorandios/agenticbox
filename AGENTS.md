@@ -1,13 +1,12 @@
 # AgenticBox — הנחיות סוכן
 
 ## שלב נוכחי
-Phase O5A.3.2 — **migration fix בלבד; `0019` ממתין להחלה ידנית** (PG 15+ ל־column-specific `ON DELETE SET NULL`).
-- Bug: composite FK עם `ON DELETE SET NULL` ללא column list מאפס גם `user_id`.
-- Fix: `0019_feed_replacement_fk_delete_scope.sql` — SET NULL רק ל־`superseded_by_feed_item_id` / `supersedes_feed_item_id`.
-- `supersedes_feed_item_id` עדיין בשימוש (`persist.ts`) → נוסף `feed_items_supersedes_idx`.
-- אין OpenAI / שינוי Feed Items / O5B. לפני החלה: `select current_setting('server_version');`
-- Feed: `OPENAI_FEED_MODEL=gpt-4o-mini`, `FEED_EXTRACTION_VERSION=o5a.3`.
-
+Phase O5A.6.6 Standalone Professional Title Normalization — **CONTROLLED PERSIST COMPLETE** (`o5a.6_general_recall_recovery`).
+- נירמול כותרות Actions + Controlled Persist של 4 כרטיסים בלבד.
+- feed_items: 36→40; inserted 4; skipped duplicates 0; existing unmodified; True Zeros untouched.
+- דוחות: `tmp/o5a66-professional-titles.{md,json}`, `tmp/o5a66-controlled-persist.{md,json}`.
+- Rollback בטוח: `status='superseded'` לפי `extraction_version` (ללא DELETE).
+- אין O5B / Webhooks / Push / Onyx.
 
 ## עקרונות
 - ממשק עברית מלא + `dir="rtl"`
@@ -17,6 +16,7 @@ Phase O5A.3.2 — **migration fix בלבד; `0019` ממתין להחלה ידנ�
 - Google Sans כ־`--font-ui`; להוסיף קבצים מורשים בלבד תחת `public/fonts`
 - credentials / grant ids / raw HTML / webhook payloads — private schema + service role בלבד
 - React לא צורך אובייקטי Nylas גולמיים
+- Feed rules: domain-agnostic + language-aware; fixtures may use domain examples, production rules must not hardcode them
 
 ## Responsive
 - ≥1440: 3 פאנלים מלאים

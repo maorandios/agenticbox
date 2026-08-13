@@ -23,6 +23,7 @@ const TYPE_LABELS: Record<string, string> = {
   change: "שינוי",
   decision: "החלטה",
   due: "מועד",
+  alert: "התראה לאימות",
 };
 
 const DEFAULT_STATUSES: FeedItemStatus[] = ["new", "open", "scheduled"];

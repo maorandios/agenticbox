@@ -86,6 +86,10 @@ export type RequestModality = z.infer<typeof RequestModalitySchema>;
 export const RequestSpeechActSchema = z.enum([
   "directive",
   "permission_request",
+  "approval_request",
+  "review_request",
+  "response_request",
+  "implicit_missing_item_request",
   "commitment",
   "status_change",
   "information",
@@ -93,6 +97,64 @@ export const RequestSpeechActSchema = z.enum([
 ]);
 
 export type RequestSpeechAct = z.infer<typeof RequestSpeechActSchema>;
+
+export const CommunicationNatureSchema = z.enum([
+  "business_request",
+  "business_decision",
+  "business_change",
+  "transactional_notice",
+  "system_notification",
+  "marketing",
+  "cold_outreach",
+  "verification_solicitation",
+  "legal_or_security_claim",
+  "informational",
+  "uncertain",
+]);
+
+export type CommunicationNature = z.infer<typeof CommunicationNatureSchema>;
+
+export const FeedDispositionSchema = z.enum([
+  "create_action",
+  "create_change",
+  "create_decision",
+  "create_alert",
+  "suppress",
+]);
+
+export type FeedDisposition = z.infer<typeof FeedDispositionSchema>;
+
+export const ActionStateSchema = z.enum([
+  "requested",
+  "committed",
+  "completed",
+  "already_sent",
+  "informational",
+  "uncertain",
+]);
+
+export type ActionState = z.infer<typeof ActionStateSchema>;
+
+export const AlertCategorySchema = z.enum([
+  "legal",
+  "security",
+  "payment",
+  "service",
+  "operational",
+  "suspicious_sender",
+]);
+
+export type AlertCategory = z.infer<typeof AlertCategorySchema>;
+
+export const AlertVerificationStateSchema = z.enum([
+  "unverified",
+  "verified",
+  "not_required",
+]);
+
+export type AlertVerificationState = z.infer<
+  typeof AlertVerificationStateSchema
+>;
 
 export const RequestDirectionSchema = z.enum([
   "requested_from_account_owner",
@@ -116,7 +178,7 @@ export const RelationToMailboxSchema = z.enum([
 export type RelationToMailbox = z.infer<typeof RelationToMailboxSchema>;
 
 export const FeedCandidateSchema = z.object({
-  type: z.enum(["action", "change", "decision"]),
+  type: z.enum(["action", "change", "decision", "alert"]),
   /** Model draft only — server overwrites with composed card headline. */
   headline: z.string().min(1).max(160),
   context: z.string().max(320).nullable(),
@@ -141,9 +203,17 @@ export const FeedCandidateSchema = z.object({
   requestModality: RequestModalitySchema.nullable(),
   /** Server-authoritative; model draft ignored. */
   requestSpeechAct: RequestSpeechActSchema.nullable(),
+  communicationNature: CommunicationNatureSchema.nullable(),
+  disposition: FeedDispositionSchema.nullable(),
+  actionState: ActionStateSchema.nullable(),
+  alertCategory: AlertCategorySchema.nullable(),
+  alertVerificationState: AlertVerificationStateSchema.nullable(),
   attributionConfidence: z.number().min(0).max(1).nullable(),
   semanticPrecisionConfidence: z.number().min(0).max(1).nullable(),
   requestEvidence: RequestEvidenceSchema.nullable(),
+  subjectEvidence: RequestEvidenceSchema.nullable(),
+  contextEvidence: RequestEvidenceSchema.nullable(),
+  businessObjectEvidence: RequestEvidenceSchema.nullable(),
   supportingEvidence: z.array(RequestEvidenceSchema).max(8),
   businessObject: z.string().nullable(),
   previousValue: z.string().nullable(),
@@ -167,6 +237,8 @@ export const FeedExtractionResultSchema = z.object({
     "informational",
     "uncertain",
   ]),
+  communicationNature: CommunicationNatureSchema.nullable(),
+  disposition: FeedDispositionSchema.nullable(),
   skipReason: z.string().nullable(),
   items: z.array(FeedCandidateSchema).max(5),
   nextState: ThreadIntelligenceStateSchema,

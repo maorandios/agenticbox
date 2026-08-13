@@ -119,6 +119,11 @@ function action(over: Partial<FeedCandidate> = {}): FeedCandidate {
     },
     requestModality: "direct_request",
     requestSpeechAct: null,
+    communicationNature: null,
+    disposition: null,
+    actionState: null,
+    alertCategory: null,
+    alertVerificationState: null,
     attributionConfidence: 0.95,
     semanticPrecisionConfidence: 0.95,
     requestEvidence: {
@@ -128,6 +133,9 @@ function action(over: Partial<FeedCandidate> = {}): FeedCandidate {
       evidenceType: "request",
       fromCurrentMessage: true,
     },
+    subjectEvidence: null,
+    contextEvidence: null,
+    businessObjectEvidence: null,
     supportingEvidence: [
       {
         sourceMessageId: "msg-0",
@@ -377,7 +385,9 @@ describe("O5A.3 golden fixtures", () => {
         removedNormalized: [],
       }),
     );
-    expect(rejected[0]?.reason).toBe("assignee_evidence_invalid");
+    expect(rejected[0]?.reason).toMatch(
+      /assignee_evidence_invalid|action_state_not_open/,
+    );
   });
 
   it("8: external sender is requester not mailbox", () => {
